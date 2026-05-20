@@ -79,11 +79,13 @@ export default async function HomePage() {
       {/* ヘッダー */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-[var(--color-muted-foreground)] text-sm">{(memberData.groups as { name: string })?.name}</p>
-          <h1 className="text-xl font-bold">{profile.nickname}</h1>
+          <p className="text-[10px] text-[var(--color-muted-foreground)] uppercase tracking-widest font-medium mb-0.5">
+            {(memberData.groups as { name: string })?.name}
+          </p>
+          <h1 className="text-2xl font-black tracking-tight">{profile.nickname}</h1>
         </div>
-        <div className="text-right text-xs text-[var(--color-muted-foreground)]">
-          今日も頑張ろう 🏓
+        <div className="w-10 h-10 rounded-xl bg-[var(--color-card-elevated)] border border-[var(--color-border)] flex items-center justify-center text-lg shadow-card">
+          🏓
         </div>
       </div>
 

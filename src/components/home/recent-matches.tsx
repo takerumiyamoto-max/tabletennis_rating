@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { History, TrendingUp, TrendingDown } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { displayRatingChange } from '@/lib/rating/elo';
@@ -17,13 +16,15 @@ export function RecentMatches({ histories, opponentMap }: RecentMatchesProps) {
       <div className="flex items-center gap-2 mb-3">
         <History className="h-4 w-4 text-[var(--color-muted-foreground)]" />
         <h2 className="font-semibold text-sm">最近の試合</h2>
-        <Link href="/history" className="text-xs text-[var(--color-primary)] ml-auto hover:underline">すべて見る</Link>
+        <Link href="/history" className="text-xs text-[var(--color-primary)] ml-auto hover:underline">
+          すべて見る
+        </Link>
       </div>
 
       {histories.length === 0 ? (
-        <div className="text-center py-8 text-[var(--color-muted-foreground)] text-sm">
+        <div className="text-center py-10 text-[var(--color-muted-foreground)] text-sm rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
           <p>まだ試合がありません</p>
-          <p className="text-xs mt-1">試合を入力してレーティングを始めよう！</p>
+          <p className="text-xs mt-1 text-[var(--color-muted-foreground)]/60">試合を入力してレーティングを始めよう！</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -36,7 +37,8 @@ export function RecentMatches({ histories, opponentMap }: RecentMatchesProps) {
             return (
               <div
                 key={history.id}
-                className="flex items-center gap-3 p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]"
+                className="flex items-center gap-3 p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] border-l-4 shadow-card"
+                style={{ borderLeftColor: isWin ? 'var(--color-win)' : 'var(--color-loss)' }}
               >
                 <Avatar className="h-9 w-9 shrink-0">
                   <AvatarImage src={opponent?.avatar_url ?? undefined} />
@@ -44,18 +46,20 @@ export function RecentMatches({ histories, opponentMap }: RecentMatchesProps) {
                     {opponent?.nickname?.[0] ?? '?'}
                   </AvatarFallback>
                 </Avatar>
+
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium truncate">{opponent?.nickname ?? '不明'}</p>
-                    <Badge variant={isWin ? 'win' : 'loss'} className="text-xs shrink-0">
-                      {isWin ? '勝' : '負'}
-                    </Badge>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-semibold truncate">{opponent?.nickname ?? '不明'}</p>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 ${isWin ? 'bg-[var(--color-win)]/15 text-[var(--color-win)]' : 'bg-[var(--color-loss)]/15 text-[var(--color-loss)]'}`}>
+                      {isWin ? '勝利' : '敗北'}
+                    </span>
                   </div>
-                  <p className="text-xs text-[var(--color-muted-foreground)]">{formatDate(history.created_at)}</p>
+                  <p className="text-[10px] text-[var(--color-muted-foreground)] mt-0.5">{formatDate(history.created_at)}</p>
                 </div>
-                <div className={`flex items-center gap-1 text-sm font-bold shrink-0 ${change >= 0 ? 'text-[var(--color-win)]' : 'text-[var(--color-loss)]'}`}>
+
+                <div className={`flex items-center gap-0.5 text-sm font-bold shrink-0 ${change >= 0 ? 'text-[var(--color-win)]' : 'text-[var(--color-loss)]'}`}>
                   {change >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-                  {changeStr}
+                  <span className="tabular-nums">{changeStr}</span>
                 </div>
               </div>
             );

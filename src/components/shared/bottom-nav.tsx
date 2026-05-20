@@ -34,13 +34,18 @@ export function BottomNav({ unreadCount = 0 }: Props) {
               key={href}
               href={href}
               className={cn(
-                'flex flex-col items-center justify-center gap-1 flex-1 py-2 px-1 text-xs font-medium transition-all duration-200',
+                'flex flex-col items-center justify-center gap-1 flex-1 py-2 px-1 text-xs font-medium transition-all duration-200 relative',
                 active
                   ? 'text-[var(--color-primary)]'
                   : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
               )}
             >
-              <div className="relative">
+              {/* アクティブピル背景 */}
+              {active && (
+                <span className="absolute inset-x-1.5 inset-y-1 rounded-xl bg-[var(--color-neon-dim)] pointer-events-none" />
+              )}
+
+              <div className="relative z-10">
                 <Icon
                   className={cn(
                     'h-5 w-5 transition-all duration-200',
@@ -53,9 +58,14 @@ export function BottomNav({ unreadCount = 0 }: Props) {
                   </span>
                 )}
               </div>
-              <span className={cn('transition-all duration-200', active && 'neon-text text-xs')}>
+              <span className={cn('relative z-10 transition-all duration-200 text-[10px]', active && 'neon-text font-semibold')}>
                 {label}
               </span>
+
+              {/* アクティブ下線 */}
+              {active && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-[var(--color-primary)] shadow-[0_0_6px_rgba(0,200,255,0.8)]" />
+              )}
             </Link>
           );
         })}

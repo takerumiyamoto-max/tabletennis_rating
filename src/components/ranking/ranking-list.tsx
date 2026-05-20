@@ -1,6 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Medal, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { RankingEntry } from '@/types/app';
 
@@ -9,7 +9,32 @@ interface RankingListProps {
   currentUserId: string;
 }
 
-const MEDAL_COLORS = ['text-yellow-400', 'text-slate-400', 'text-amber-600'];
+const RANK_STYLES = [
+  {
+    border: 'border-[var(--color-gold)]/50',
+    bg: 'gradient-gold',
+    medal: '🥇',
+    medalColor: 'text-[var(--color-gold)]',
+    ratingColor: 'text-[var(--color-gold)]',
+    shadow: '0 2px 16px rgba(245,158,11,0.15)',
+  },
+  {
+    border: 'border-[var(--color-silver)]/40',
+    bg: 'gradient-silver',
+    medal: '🥈',
+    medalColor: 'text-[var(--color-silver)]',
+    ratingColor: 'text-[var(--color-silver)]',
+    shadow: '0 2px 12px rgba(148,163,184,0.12)',
+  },
+  {
+    border: 'border-[var(--color-bronze)]/40',
+    bg: 'gradient-bronze',
+    medal: '🥉',
+    medalColor: 'text-[var(--color-bronze)]',
+    ratingColor: 'text-amber-600',
+    shadow: '0 2px 12px rgba(180,83,9,0.12)',
+  },
+];
 
 export function RankingList({ entries, currentUserId }: RankingListProps) {
   if (entries.length === 0) {
@@ -29,54 +54,72 @@ export function RankingList({ entries, currentUserId }: RankingListProps) {
           : 0;
         const hasStreak = entry.current_streak !== 0;
         const streakWin = entry.current_streak > 0;
+        const topStyle = entry.rank <= 3 ? RANK_STYLES[entry.rank - 1] : null;
 
         return (
           <div
             key={entry.user_id}
             className={cn(
               'flex items-center gap-3 p-3 rounded-xl border transition-all',
-              isMe
-                ? 'border-[var(--color-primary)]/40 bg-[var(--color-neon-dim)] neon-glow'
+              topStyle ? `${topStyle.bg} ${topStyle.border}` : isMe
+                ? 'border-[var(--color-primary)]/40 bg-[var(--color-neon-dim)]'
                 : 'border-[var(--color-border)] bg-[var(--color-card)]'
             )}
+            style={{
+              boxShadow: topStyle ? topStyle.shadow : isMe ? 'var(--shadow-neon-sm)' : 'var(--shadow-card)',
+            }}
           >
             {/* 順位 */}
-            <div className="w-8 text-center shrink-0">
-              {entry.rank <= 3 ? (
-                <Medal className={cn('h-5 w-5 mx-auto', MEDAL_COLORS[entry.rank - 1])} />
+            <div className="w-9 text-center shrink-0">
+              {topStyle ? (
+                <span className="text-2xl leading-none">{topStyle.medal}</span>
               ) : (
-                <span className="text-sm font-bold text-[var(--color-muted-foreground)]">
+                <span className={cn(
+                  'text-sm font-black tabular-nums',
+                  isMe ? 'text-[var(--color-primary)]' : 'text-[var(--color-muted-foreground)]'
+                )}>
                   {entry.rank}
                 </span>
               )}
             </div>
 
             {/* アバター */}
-            <Avatar className="h-9 w-9 shrink-0">
+            <Avatar className={cn(
+              'shrink-0',
+              entry.rank === 1 ? 'h-11 w-11' : 'h-9 w-9',
+              isMe && 'ring-2 ring-[var(--color-primary)]/60'
+            )}>
               <AvatarImage src={entry.avatar_url ?? undefined} />
               <AvatarFallback className="text-xs">{entry.nickname[0]}</AvatarFallback>
             </Avatar>
 
-            {/* 名前 + バッジ */}
+            {/* 名前 + サブ情報 */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className={cn('text-sm font-semibold truncate', isMe && 'text-[var(--color-primary)]')}>
+                <span className={cn(
+                  'font-bold truncate',
+                  entry.rank === 1 ? 'text-base' : 'text-sm',
+                  isMe ? 'text-[var(--color-primary)]' : 'text-[var(--color-foreground)]'
+                )}>
                   {entry.nickname}
-                  {isMe && <span className="text-xs font-normal ml-1">(自分)</span>}
+                  {isMe && <span className="text-[10px] font-normal ml-1 text-[var(--color-muted-foreground)]">YOU</span>}
                 </span>
                 {entry.is_provisional && (
                   <Badge variant="provisional" className="text-[10px] px-1.5 py-0">仮</Badge>
                 )}
               </div>
-              <div className="flex items-center gap-2 mt-0.5 text-xs text-[var(--color-muted-foreground)]">
-                <span className="text-[var(--color-win)]">{entry.wins}勝</span>
-                <span>/</span>
-                <span className="text-[var(--color-loss)]">{entry.losses}敗</span>
-                <span>({winRate}%)</span>
+              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-[var(--color-muted-foreground)]">
+                <span className="text-[var(--color-win)] font-semibold">{entry.wins}勝</span>
+                <span className="text-[var(--color-loss)] font-semibold">{entry.losses}敗</span>
+                <span className="opacity-60">·</span>
+                <span>{winRate}%</span>
                 {hasStreak && (
-                  <span className={streakWin ? 'text-[var(--color-win)]' : 'text-[var(--color-loss)]'}>
-                    {streakWin ? `${entry.current_streak}連勝` : `${Math.abs(entry.current_streak)}連敗`}
-                  </span>
+                  <>
+                    <span className="opacity-60">·</span>
+                    <span className={streakWin ? 'text-[var(--color-win)] font-semibold' : 'text-[var(--color-loss)] font-semibold'}>
+                      {streakWin ? `${entry.current_streak}連勝` : `${Math.abs(entry.current_streak)}連敗`}
+                    </span>
+                  </>
                 )}
               </div>
             </div>
@@ -84,22 +127,31 @@ export function RankingList({ entries, currentUserId }: RankingListProps) {
             {/* レーティング */}
             <div className="text-right shrink-0">
               <p className={cn(
-                'text-lg font-black tabular-nums',
-                isMe ? 'neon-text' : 'text-[var(--color-foreground)]'
+                'font-black tabular-nums leading-none',
+                entry.rank === 1 ? 'text-2xl' : 'text-xl',
+                topStyle ? topStyle.ratingColor : isMe ? 'neon-text' : 'text-[var(--color-foreground)]'
               )}>
                 {entry.rating_display}
               </p>
               {entry.rating_change_today !== null && (
                 <div className={cn(
-                  'flex items-center justify-end gap-0.5 text-xs font-medium',
-                  entry.rating_change_today > 0 ? 'text-[var(--color-win)]' : entry.rating_change_today < 0 ? 'text-[var(--color-loss)]' : 'text-[var(--color-muted-foreground)]'
+                  'flex items-center justify-end gap-0.5 text-[10px] font-semibold mt-0.5',
+                  entry.rating_change_today > 0
+                    ? 'text-[var(--color-win)]'
+                    : entry.rating_change_today < 0
+                    ? 'text-[var(--color-loss)]'
+                    : 'text-[var(--color-muted-foreground)]'
                 )}>
                   {entry.rating_change_today > 0
                     ? <TrendingUp className="h-3 w-3" />
                     : entry.rating_change_today < 0
                     ? <TrendingDown className="h-3 w-3" />
                     : <Minus className="h-3 w-3" />}
-                  {entry.rating_change_today > 0 ? `+${Math.round(entry.rating_change_today)}` : Math.round(entry.rating_change_today)}
+                  <span>
+                    {entry.rating_change_today > 0
+                      ? `+${Math.round(entry.rating_change_today)}`
+                      : Math.round(entry.rating_change_today)}
+                  </span>
                 </div>
               )}
             </div>

@@ -1,5 +1,4 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { formatDateTime } from '@/lib/utils';
 import { displayRatingChange } from '@/lib/rating/elo';
@@ -39,33 +38,44 @@ export function MatchHistoryList(props: Props) {
           const isWin = h.result === 'win';
           const change = h.rating_change;
           const m = h.matches;
+          const score = m
+            ? m.player_a_id === props.currentUserId
+              ? `${m.player_a_sets}-${m.player_b_sets}`
+              : `${m.player_b_sets}-${m.player_a_sets}`
+            : null;
 
           return (
-            <div key={h.id} className="flex items-center gap-3 p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
+            <div
+              key={h.id}
+              className="flex items-center gap-3 p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] border-l-4 shadow-card"
+              style={{ borderLeftColor: isWin ? 'var(--color-win)' : 'var(--color-loss)' }}
+            >
               <Avatar className="h-9 w-9 shrink-0">
                 <AvatarImage src={opponent?.avatar_url ?? undefined} />
                 <AvatarFallback className="text-xs">{opponent?.nickname?.[0] ?? '?'}</AvatarFallback>
               </Avatar>
+
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-sm font-semibold truncate">{opponent?.nickname ?? '不明'}</span>
-                  <Badge variant={isWin ? 'win' : 'loss'} className="text-xs shrink-0">{isWin ? '勝' : '負'}</Badge>
-                  {m && (
-                    <span className="text-xs text-[var(--color-muted-foreground)] shrink-0">
-                      {m.player_a_id === props.currentUserId
-                        ? `${m.player_a_sets}-${m.player_b_sets}`
-                        : `${m.player_b_sets}-${m.player_a_sets}`}
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 ${isWin ? 'bg-[var(--color-win)]/15 text-[var(--color-win)]' : 'bg-[var(--color-loss)]/15 text-[var(--color-loss)]'}`}>
+                    {isWin ? '勝利' : '敗北'}
+                  </span>
+                  {score && (
+                    <span className="text-xs font-black text-[var(--color-muted-foreground)] shrink-0 tabular-nums">
+                      {score}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-[var(--color-muted-foreground)]">{formatDateTime(h.created_at)}</p>
+                <p className="text-[10px] text-[var(--color-muted-foreground)] mt-0.5">{formatDateTime(h.created_at)}</p>
               </div>
+
               <div className="text-right shrink-0">
                 <div className={`flex items-center gap-0.5 text-sm font-bold justify-end ${change >= 0 ? 'text-[var(--color-win)]' : 'text-[var(--color-loss)]'}`}>
                   {change >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-                  {displayRatingChange(change)}
+                  <span className="tabular-nums">{displayRatingChange(change)}</span>
                 </div>
-                <p className="text-xs text-[var(--color-muted-foreground)]">{Math.round(h.rating_after)}</p>
+                <p className="text-[10px] text-[var(--color-muted-foreground)] tabular-nums">{Math.round(h.rating_after)}</p>
               </div>
             </div>
           );
@@ -75,7 +85,7 @@ export function MatchHistoryList(props: Props) {
   }
 
   // group mode
-  const { matches, profileMap, currentUserId } = props;
+  const { matches, profileMap } = props;
   if (matches.length === 0) {
     return <EmptyState message="まだ試合がありません" />;
   }
@@ -88,35 +98,50 @@ export function MatchHistoryList(props: Props) {
         const aWon = m.winner_id === m.player_a_id;
 
         return (
-          <div key={m.id} className="p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
+          <div
+            key={m.id}
+            className="p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-card"
+          >
             <div className="flex items-center gap-2">
-              <div className={`flex-1 flex items-center gap-2 min-w-0 ${aWon ? '' : 'opacity-60'}`}>
-                <Avatar className="h-7 w-7 shrink-0">
+              {/* プレイヤーA */}
+              <div className={`flex-1 flex items-center gap-2 min-w-0 ${!aWon ? 'opacity-50' : ''}`}>
+                <Avatar className="h-8 w-8 shrink-0">
                   <AvatarImage src={playerA?.avatar_url ?? undefined} />
                   <AvatarFallback className="text-[10px]">{playerA?.nickname?.[0] ?? '?'}</AvatarFallback>
                 </Avatar>
                 <span className="text-sm font-semibold truncate">{playerA?.nickname ?? '?'}</span>
-                {aWon && <Badge variant="win" className="text-[10px] shrink-0">勝</Badge>}
+                {aWon && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-[var(--color-win)]/15 text-[var(--color-win)] shrink-0">勝</span>
+                )}
               </div>
-              <div className="text-center shrink-0 px-2">
-                <p className="text-base font-black">
+
+              {/* スコア */}
+              <div className="text-center shrink-0 px-1">
+                <p className="text-lg font-black tabular-nums">
                   <span className={aWon ? 'text-[var(--color-win)]' : 'text-[var(--color-loss)]'}>{m.player_a_sets}</span>
-                  <span className="text-[var(--color-muted-foreground)] mx-0.5">-</span>
+                  <span className="text-[var(--color-muted-foreground)] mx-1">-</span>
                   <span className={!aWon ? 'text-[var(--color-win)]' : 'text-[var(--color-loss)]'}>{m.player_b_sets}</span>
                 </p>
               </div>
-              <div className={`flex-1 flex items-center gap-2 justify-end min-w-0 ${!aWon ? '' : 'opacity-60'}`}>
-                {!aWon && <Badge variant="win" className="text-[10px] shrink-0">勝</Badge>}
+
+              {/* プレイヤーB */}
+              <div className={`flex-1 flex items-center gap-2 justify-end min-w-0 ${aWon ? 'opacity-50' : ''}`}>
+                {!aWon && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-[var(--color-win)]/15 text-[var(--color-win)] shrink-0">勝</span>
+                )}
                 <span className="text-sm font-semibold truncate text-right">{playerB?.nickname ?? '?'}</span>
-                <Avatar className="h-7 w-7 shrink-0">
+                <Avatar className="h-8 w-8 shrink-0">
                   <AvatarImage src={playerB?.avatar_url ?? undefined} />
                   <AvatarFallback className="text-[10px]">{playerB?.nickname?.[0] ?? '?'}</AvatarFallback>
                 </Avatar>
               </div>
             </div>
-            <p className="text-xs text-[var(--color-muted-foreground)] mt-1.5 text-center">
-              {formatDateTime(m.approved_at ?? m.created_at)} · {m.match_format === 'best_of_5' ? '5G制' : '3G制'}
-            </p>
+
+            <div className="flex items-center justify-center gap-2 mt-2 text-[10px] text-[var(--color-muted-foreground)]">
+              <span>{formatDateTime(m.approved_at ?? m.created_at)}</span>
+              <span>·</span>
+              <span>{m.match_format === 'best_of_5' ? '5G制' : '3G制'}</span>
+            </div>
           </div>
         );
       })}
