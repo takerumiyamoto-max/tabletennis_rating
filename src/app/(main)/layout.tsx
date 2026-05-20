@@ -29,12 +29,18 @@ export default async function MainLayout({ children }: { children: React.ReactNo
 
   if (!member) redirect('/onboarding');
 
+  const { count: unreadCount } = await supabase
+    .from('notifications')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .is('read_at', null);
+
   return (
     <div className="min-h-dvh flex flex-col">
       <main className="flex-1 pb-safe overflow-y-auto">
         {children}
       </main>
-      <BottomNav />
+      <BottomNav unreadCount={unreadCount ?? 0} />
       <Toaster />
     </div>
   );
