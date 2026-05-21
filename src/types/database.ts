@@ -25,6 +25,7 @@ export interface Profile {
   user_id: string;
   nickname: string;
   avatar_url: string | null;
+  active_group_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -167,6 +168,7 @@ export type Database = {
           user_id?: string;
           nickname?: string;
           avatar_url?: string | null;
+          active_group_id?: string | null;
           updated_at?: string;
         };
         Relationships: [];

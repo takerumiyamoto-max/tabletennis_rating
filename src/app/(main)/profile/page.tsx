@@ -111,6 +111,24 @@ export default async function ProfilePage() {
         </div>
       )}
 
+      {/* グループ管理リンク */}
+      <Link
+        href="/groups"
+        className="flex items-center justify-between p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] hover:border-[var(--color-primary)]/40 hover:bg-[var(--color-neon-dim)] transition-all group"
+      >
+        <div>
+          <p className="text-sm font-semibold group-hover:text-[var(--color-primary)] transition-colors">
+            所属グループ管理
+          </p>
+          <p className="text-[10px] text-[var(--color-muted-foreground)] mt-0.5">
+            {(memberData.groups as unknown as { name: string })?.name} · 切り替え・参加・作成
+          </p>
+        </div>
+        <svg className="h-4 w-4 text-[var(--color-muted-foreground)] group-hover:text-[var(--color-primary)] transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+      </Link>
+
       {isAdmin && (
         <Link
           href="/admin"

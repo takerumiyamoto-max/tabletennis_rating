@@ -4,6 +4,8 @@ import { getAuthUser, getUserProfile, getActiveGroupMember } from '@/lib/supabas
 import { RatingCard } from '@/components/home/rating-card';
 import { PendingApprovals } from '@/components/home/pending-approvals';
 import { RecentMatches } from '@/components/home/recent-matches';
+import Link from 'next/link';
+import { ChevronDown } from 'lucide-react';
 
 export default async function HomePage() {
   const user = await getAuthUser();
@@ -56,9 +58,15 @@ export default async function HomePage() {
       {/* ヘッダー */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-[10px] text-[var(--color-muted-foreground)] uppercase tracking-widest font-medium mb-0.5">
-            {(memberData.groups as unknown as { name: string })?.name}
-          </p>
+          <Link
+            href="/groups"
+            className="inline-flex items-center gap-1 group mb-0.5"
+          >
+            <p className="text-[10px] text-[var(--color-muted-foreground)] uppercase tracking-widest font-medium group-hover:text-[var(--color-primary)] transition-colors">
+              {(memberData.groups as unknown as { name: string })?.name}
+            </p>
+            <ChevronDown className="h-2.5 w-2.5 text-[var(--color-muted-foreground)] group-hover:text-[var(--color-primary)] transition-colors" />
+          </Link>
           <h1 className="text-2xl font-black tracking-tight">{profile.nickname}</h1>
         </div>
         <div className="w-10 h-10 rounded-xl bg-[var(--color-card-elevated)] border border-[var(--color-border)] flex items-center justify-center text-lg shadow-card">
