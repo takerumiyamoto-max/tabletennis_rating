@@ -13,9 +13,9 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from '@/hooks/use-toast';
 import {
   Users, Clock, Settings, Tag, XCircle, ShieldCheck,
-  Loader2, Plus, Pencil, Save, X, Power, UserMinus,
+  Loader2, Plus, Pencil, Save, X, Power, UserMinus, RefreshCw,
 } from 'lucide-react';
-import { removeMember } from '@/app/actions/groups';
+import { removeMember, changeMyInitialRating } from '@/app/actions/groups';
 import { formatDateTime } from '@/lib/utils';
 import type { MemberRole, GroupRatingSettings, InitialRatingLabel } from '@/types/database';
 
@@ -82,8 +82,9 @@ export function AdminDashboard({
   groupId, group, myRole, members, pendingMatches,
   ratingSettings: initialSettings, labels: initialLabels, currentUserId,
 }: Props) {
-  // 汎用ローディング（メンバー操作・試合キャンセル）
   const [loading, setLoading] = useState(false);
+  const [changingMyRating, setChangingMyRating] = useState(false);
+  const [myRatingLabelId, setMyRatingLabelId] = useState<string | null>(null);
 
   // ラベル
   const [labels, setLabels]             = useState<InitialRatingLabel[]>(initialLabels);
@@ -128,6 +129,22 @@ export function AdminDashboard({
       toast({ title: '権限を変更しました', variant: 'success' });
     } catch {
       toast({ title: 'エラー', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleChangeMyRating() {
+    if (!myRatingLabelId) return;
+    setLoading(true);
+    try {
+      const result = await changeMyInitialRating(groupId, myRatingLabelId);
+      if (result.error) throw new Error(result.error);
+      toast({ title: '初期レートを変更しました', variant: 'success' });
+      setChangingMyRating(false);
+      setMyRatingLabelId(null);
+    } catch (err: unknown) {
+      toast({ title: 'エラー', description: err instanceof Error ? err.message : '失敗しました', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -383,6 +400,16 @@ export function AdminDashboard({
                       {pr ? `${Math.round(Number(pr.rating ?? 0))} pt · ${pr.wins ?? 0}勝` : 'レートなし'}
                     </p>
                   </div>
+                  {m.user_id === currentUserId && (
+                    <Button
+                      size="sm" variant="outline"
+                      className="h-7 text-xs px-2 shrink-0"
+                      onClick={() => { setChangingMyRating(v => !v); setMyRatingLabelId(null); }}
+                      disabled={loading}
+                    >
+                      <RefreshCw className="h-3 w-3 mr-0.5" />初期レート変更
+                    </Button>
+                  )}
                   {(myRole === 'owner' || myRole === 'admin') && m.user_id !== currentUserId && m.role !== 'owner' && (
                     <div className="flex gap-1 shrink-0">
                       {myRole === 'owner' && m.role !== 'admin' && (
@@ -407,6 +434,49 @@ export function AdminDashboard({
                     </div>
                   )}
                 </div>
+
+                {/* 自分の初期レート変更パネル */}
+                {m.user_id === currentUserId && changingMyRating && (
+                  <div className="mt-3 pt-3 border-t border-[var(--color-border)] space-y-2">
+                    <p className="text-xs text-[var(--color-muted-foreground)]">新しい初期レートラベルを選択</p>
+                    <div className="space-y-1.5">
+                      {labels.filter(l => l.is_active).map(l => (
+                        <button
+                          key={l.id}
+                          type="button"
+                          onClick={() => setMyRatingLabelId(l.id)}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-sm transition-all ${
+                            myRatingLabelId === l.id
+                              ? 'border-[var(--color-primary)] bg-[var(--color-neon-dim)] text-[var(--color-primary)]'
+                              : 'border-[var(--color-border)] bg-[var(--color-card-elevated)] hover:border-[var(--color-primary)]/40'
+                          }`}
+                        >
+                          <span className="font-medium">{l.label}</span>
+                          <span className="font-mono text-xs">{l.initial_rating} pt</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        type="button" variant="outline" size="sm" className="flex-1 h-8"
+                        onClick={() => { setChangingMyRating(false); setMyRatingLabelId(null); }}
+                      >
+                        <X className="h-3.5 w-3.5 mr-1" />キャンセル
+                      </Button>
+                      <Button
+                        type="button" size="sm" className="flex-1 h-8"
+                        onClick={handleChangeMyRating}
+                        disabled={!myRatingLabelId || loading}
+                      >
+                        {loading
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                          : <Save className="h-3.5 w-3.5 mr-1" />
+                        }
+                        変更する
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           );
