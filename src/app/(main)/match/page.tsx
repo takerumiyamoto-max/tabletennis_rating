@@ -1,26 +1,18 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { getAuthUser, getActiveGroupMember } from '@/lib/supabase/cached-queries';
 import { MatchForm } from '@/components/match/match-form';
 
 export default async function MatchPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) redirect('/login');
 
-  // グループ取得
-  const { data: memberData } = await supabase
-    .from('group_members')
-    .select('group_id')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .order('joined_at', { ascending: true })
-    .limit(1)
-    .single();
-
+  const memberData = await getActiveGroupMember(user.id);
   if (!memberData) redirect('/onboarding');
-  const groupId = memberData.group_id;
 
-  // グループメンバー一覧 (自分以外)
+  const groupId = memberData.group_id;
+  const supabase = await createClient();
+
   const { data: members } = await supabase
     .from('group_members')
     .select('user_id, profiles(nickname, avatar_url)')

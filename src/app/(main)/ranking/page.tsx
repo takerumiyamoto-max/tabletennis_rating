@@ -1,28 +1,20 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { getAuthUser, getActiveGroupMember } from '@/lib/supabase/cached-queries';
 import { RankingList } from '@/components/ranking/ranking-list';
 import type { RankingEntry } from '@/types/app';
 
 export default async function RankingPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) redirect('/login');
 
-  const { data: memberData } = await supabase
-    .from('group_members')
-    .select('group_id, groups(name)')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .order('joined_at', { ascending: true })
-    .limit(1)
-    .single();
-
+  const memberData = await getActiveGroupMember(user.id);
   if (!memberData) redirect('/onboarding');
 
   const groupId = memberData.group_id;
   const groupName = (memberData.groups as unknown as { name: string })?.name ?? '';
 
-  // レーティング一覧 (降順)
+  const supabase = await createClient();
   const { data: ratings } = await supabase
     .from('player_ratings')
     .select('*')
@@ -31,12 +23,10 @@ export default async function RankingPage() {
 
   if (!ratings) return null;
 
-  // プロフィール一覧
   const userIds = ratings.map(r => r.user_id);
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('user_id, nickname, avatar_url')
-    .in('user_id', userIds);
+  const { data: profiles } = userIds.length > 0
+    ? await supabase.from('profiles').select('user_id, nickname, avatar_url').in('user_id', userIds)
+    : { data: [] };
 
   const profileMap = new Map(profiles?.map(p => [p.user_id, p]) ?? []);
 

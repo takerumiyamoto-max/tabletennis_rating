@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: '卓球レーティング',
+  title: 'TopSpin',
   description: '卓球部・サークル向けレーティング管理アプリ',
   manifest: '/manifest.json',
 };

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { getAuthUser, getUserProfile, getActiveGroupMember } from '@/lib/supabase/cached-queries';
 import Link from 'next/link';
 import { RatingChart } from '@/components/profile/rating-chart';
 import { MyStatsCard } from '@/components/profile/my-stats-card';
@@ -8,71 +9,51 @@ import type { RatingChartPoint } from '@/types/app';
 import type { RatingHistory } from '@/types/database';
 
 export default async function ProfilePage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) redirect('/login');
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('user_id', user.id)
-    .single();
-
-  const { data: memberData } = await supabase
-    .from('group_members')
-    .select('group_id, role')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .order('joined_at', { ascending: true })
-    .limit(1)
-    .single();
+  const [profile, memberData] = await Promise.all([
+    getUserProfile(user.id),
+    getActiveGroupMember(user.id),
+  ]);
 
   if (!profile || !memberData) redirect('/onboarding');
   const groupId = memberData.group_id;
   const isAdmin = memberData.role === 'owner' || memberData.role === 'admin';
 
-  const { data: playerRating } = await supabase
-    .from('player_ratings')
-    .select('*')
-    .eq('group_id', groupId)
-    .eq('user_id', user.id)
-    .single();
+  const supabase = await createClient();
 
-  // ランキング順位
-  const { count: rankCount } = await supabase
-    .from('player_ratings')
-    .select('*', { count: 'exact', head: true })
-    .eq('group_id', groupId)
-    .gt('rating', playerRating?.rating ?? 0);
+  const [
+    { data: playerRating },
+    { data: historiesRaw },
+  ] = await Promise.all([
+    supabase.from('player_ratings').select('*').eq('group_id', groupId).eq('user_id', user.id).single(),
+    supabase.from('rating_histories').select('*').eq('group_id', groupId).eq('user_id', user.id)
+      .order('created_at', { ascending: true }).limit(50),
+  ]);
 
-  const { count: totalCount } = await supabase
-    .from('player_ratings')
-    .select('*', { count: 'exact', head: true })
-    .eq('group_id', groupId);
-
-  const rank = (rankCount ?? 0) + 1;
-
-  // レート推移履歴 (join は型推論が複雑なため RatingHistory[] にアサート)
-  const { data: historiesRaw } = await supabase
-    .from('rating_histories')
-    .select('*')
-    .eq('group_id', groupId)
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: true })
-    .limit(50);
   const histories = historiesRaw as RatingHistory[] | null;
 
-  // 対戦相手プロフィール
-  const oppIds = histories?.map(h => h.opponent_id) ?? [];
-  const { data: oppProfiles } = oppIds.length > 0
-    ? await supabase.from('profiles').select('user_id, nickname').in('user_id', oppIds)
-    : { data: [] };
+  const [
+    { count: rankCount },
+    { count: totalCount },
+    { data: oppProfiles },
+  ] = await Promise.all([
+    supabase.from('player_ratings').select('*', { count: 'exact', head: true })
+      .eq('group_id', groupId).gt('rating', playerRating?.rating ?? 0),
+    supabase.from('player_ratings').select('*', { count: 'exact', head: true })
+      .eq('group_id', groupId),
+    (histories?.length ?? 0) > 0
+      ? supabase.from('profiles').select('user_id, nickname')
+          .in('user_id', histories!.map(h => h.opponent_id))
+      : Promise.resolve({ data: [] as { user_id: string; nickname: string }[] }),
+  ]);
+
+  const rank = (rankCount ?? 0) + 1;
   const oppMap = new Map(oppProfiles?.map(p => [p.user_id, p.nickname]) ?? []);
 
-  // グラフデータ (初期レートから始める)
   const chartPoints: RatingChartPoint[] = [];
   if (playerRating) {
-    // 最初の点 (初期レート)
     chartPoints.push({
       date: profile.created_at,
       rating: playerRating.initial_rating,
@@ -101,7 +82,6 @@ export default async function ProfilePage() {
 
   return (
     <div className="px-4 pt-6 pb-4 max-w-lg mx-auto space-y-5">
-      {/* プロフィールヒーロー */}
       <ProfileEditForm
         profile={profile}
         rating={playerRating ? Number(playerRating.rating) : undefined}
@@ -109,7 +89,6 @@ export default async function ProfilePage() {
         isProvisional={playerRating?.is_provisional}
       />
 
-      {/* 統計カード */}
       {playerRating && (
         <MyStatsCard
           rating={Number(playerRating.rating)}
@@ -125,7 +104,6 @@ export default async function ProfilePage() {
         />
       )}
 
-      {/* レート推移グラフ */}
       {chartPoints.length > 1 && (
         <div>
           <h2 className="font-semibold text-sm mb-3">レート推移</h2>
@@ -133,7 +111,6 @@ export default async function ProfilePage() {
         </div>
       )}
 
-      {/* 管理者リンク */}
       {isAdmin && (
         <Link
           href="/admin"

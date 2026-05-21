@@ -1,34 +1,21 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { getAuthUser, getUserProfile, getActiveGroupMember } from '@/lib/supabase/cached-queries';
 import { BottomNav } from '@/components/shared/bottom-nav';
 import { Toaster } from '@/components/ui/toaster';
 
 export default async function MainLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
+  const user = await getAuthUser();
   if (!user) redirect('/login');
 
-  // プロフィール未作成 → オンボーディングへ
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('user_id', user.id)
-    .single();
+  const [profile, member] = await Promise.all([
+    getUserProfile(user.id),
+    getActiveGroupMember(user.id),
+  ]);
 
-  if (!profile) redirect('/onboarding');
+  if (!profile || !member) redirect('/onboarding');
 
-  // グループ未所属 → オンボーディングへ
-  const { data: member } = await supabase
-    .from('group_members')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .limit(1)
-    .single();
-
-  if (!member) redirect('/onboarding');
-
+  const supabase = await createClient();
   const { count: unreadCount } = await supabase
     .from('notifications')
     .select('*', { count: 'exact', head: true })

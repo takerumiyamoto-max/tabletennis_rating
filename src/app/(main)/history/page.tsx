@@ -1,49 +1,34 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { getAuthUser, getActiveGroupMember } from '@/lib/supabase/cached-queries';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MatchHistoryList } from '@/components/history/match-history-list';
 
 export default async function HistoryPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) redirect('/login');
 
-  const { data: memberData } = await supabase
-    .from('group_members')
-    .select('group_id')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .order('joined_at', { ascending: true })
-    .limit(1)
-    .single();
-
+  const memberData = await getActiveGroupMember(user.id);
   if (!memberData) redirect('/onboarding');
+
   const groupId = memberData.group_id;
+  const supabase = await createClient();
 
-  // 自分の履歴
-  const { data: myHistories } = await supabase
-    .from('rating_histories')
-    .select('*, matches(match_format, player_a_sets, player_b_sets, player_a_id, player_b_id, status)')
-    .eq('group_id', groupId)
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(30);
+  const [{ data: myHistories }, { data: groupMatches }] = await Promise.all([
+    supabase.from('rating_histories')
+      .select('*, matches(match_format, player_a_sets, player_b_sets, player_a_id, player_b_id, status)')
+      .eq('group_id', groupId).eq('user_id', user.id)
+      .order('created_at', { ascending: false }).limit(30),
+    supabase.from('matches')
+      .select('*')
+      .eq('group_id', groupId).eq('status', 'approved')
+      .order('approved_at', { ascending: false }).limit(30),
+  ]);
 
-  // グループ全体の最近の承認済み試合
-  const { data: groupMatches } = await supabase
-    .from('matches')
-    .select('*')
-    .eq('group_id', groupId)
-    .eq('status', 'approved')
-    .order('approved_at', { ascending: false })
-    .limit(30);
-
-  // 対戦相手プロフィール収集
-  const opponentIds = [
+  const uniqueIds = [...new Set([
     ...(myHistories?.map(h => h.opponent_id) ?? []),
     ...(groupMatches?.flatMap(m => [m.player_a_id, m.player_b_id]) ?? []),
-  ];
-  const uniqueIds = [...new Set(opponentIds)];
+  ])];
   const { data: profiles } = uniqueIds.length > 0
     ? await supabase.from('profiles').select('user_id, nickname, avatar_url').in('user_id', uniqueIds)
     : { data: [] };
