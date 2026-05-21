@@ -5,10 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Home, Sword, Trophy, History, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
-
-interface Props {
-  unreadCount?: number;
-}
+import { UnreadBadge } from '@/components/shared/unread-badge';
 
 const navItems = [
   { href: '/',        label: 'ホーム',     icon: Home,    badge: true  },
@@ -18,11 +15,10 @@ const navItems = [
   { href: '/profile', label: 'マイページ', icon: User,    badge: false },
 ] as const;
 
-export function BottomNav({ unreadCount = 0 }: Props) {
+export function BottomNav() {
   const pathname = usePathname();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
 
-  // ナビゲーション完了時にpending状態をクリア
   useEffect(() => {
     setPendingHref(null);
   }, [pathname]);
@@ -36,7 +32,6 @@ export function BottomNav({ unreadCount = 0 }: Props) {
         {navItems.map(({ href, label, icon: Icon, badge }) => {
           const active  = pathname === href || (href !== '/' && pathname.startsWith(href));
           const pending = pendingHref === href && !active;
-          const count   = badge ? unreadCount : 0;
 
           return (
             <Link
@@ -54,12 +49,9 @@ export function BottomNav({ unreadCount = 0 }: Props) {
                   : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
               )}
             >
-              {/* アクティブピル背景 */}
               {active && (
                 <span className="absolute inset-x-1.5 inset-y-1 rounded-xl bg-[var(--color-neon-dim)] pointer-events-none" />
               )}
-
-              {/* 遷移中ピル背景 */}
               {pending && (
                 <span className="absolute inset-x-1.5 inset-y-1 rounded-xl bg-[var(--color-neon-dim)]/40 pointer-events-none animate-pulse" />
               )}
@@ -72,11 +64,7 @@ export function BottomNav({ unreadCount = 0 }: Props) {
                     pending && 'opacity-70'
                   )}
                 />
-                {count > 0 && (
-                  <span className="absolute -top-1 -right-1.5 min-w-[1rem] h-4 px-0.5 bg-[var(--color-loss)] text-white rounded-full text-[9px] font-bold flex items-center justify-center leading-none">
-                    {count > 9 ? '9+' : count}
-                  </span>
-                )}
+                {badge && <UnreadBadge />}
               </div>
 
               <span className={cn(

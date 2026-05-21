@@ -38,35 +38,33 @@ export default async function HomePage() {
       .order('created_at', { ascending: false }).limit(5),
   ]);
 
-  const pendingPlayerIds = [...new Set([
+  // 全 user_id をまとめて1回の profiles クエリに
+  const allProfileIds = [...new Set([
+    ...(recentMatches ?? []).map(m => m.opponent_id as string),
     ...(pendingMatchesRaw ?? []).map(m => m.player_a_id as string),
     ...(pendingMatchesRaw ?? []).map(m => m.player_b_id as string),
   ])];
 
   const [
     { count: rankCount },
-    { data: opponentProfiles },
-    { data: pendingProfiles },
+    { data: allProfiles },
   ] = await Promise.all([
-    supabase.from('player_ratings').select('*', { count: 'exact', head: true })
+    supabase.from('player_ratings')
+      .select('user_id', { count: 'exact', head: true })
       .eq('group_id', groupId).gt('rating', playerRating?.rating ?? 0),
-    (recentMatches?.length ?? 0) > 0
-      ? supabase.from('profiles').select('user_id, nickname, avatar_url')
-          .in('user_id', recentMatches!.map(m => m.opponent_id))
-      : Promise.resolve({ data: [] as { user_id: string; nickname: string; avatar_url: string | null }[] }),
-    pendingPlayerIds.length > 0
-      ? supabase.from('profiles').select('user_id, nickname, avatar_url').in('user_id', pendingPlayerIds)
+    allProfileIds.length > 0
+      ? supabase.from('profiles').select('user_id, nickname, avatar_url').in('user_id', allProfileIds)
       : Promise.resolve({ data: [] as { user_id: string; nickname: string; avatar_url: string | null }[] }),
   ]);
 
   const rank = (rankCount ?? 0) + 1;
-  const opponentMap = new Map(opponentProfiles?.map(p => [p.user_id, p]) ?? []);
+  const profileMap = new Map(allProfiles?.map(p => [p.user_id, p]) ?? []);
+  const opponentMap = profileMap;
 
-  const pendingProfileMap = new Map(pendingProfiles?.map(p => [p.user_id, p]) ?? []);
   const pendingMatches = (pendingMatchesRaw ?? []).map(m => ({
     ...m,
-    'profiles!matches_player_a_id_fkey': pendingProfileMap.get(m.player_a_id) ?? null,
-    'profiles!matches_player_b_id_fkey': pendingProfileMap.get(m.player_b_id) ?? null,
+    'profiles!matches_player_a_id_fkey': profileMap.get(m.player_a_id) ?? null,
+    'profiles!matches_player_b_id_fkey': profileMap.get(m.player_b_id) ?? null,
   }));
 
   return (
