@@ -23,12 +23,12 @@ export default async function HomePage() {
 
   const [
     { data: playerRating },
-    { data: pendingMatches },
+    { data: pendingMatchesRaw },
     { data: recentMatches },
   ] = await Promise.all([
     supabase.from('player_ratings').select('*').eq('group_id', groupId).eq('user_id', user.id).single(),
     supabase.from('matches')
-      .select('*, profiles!matches_player_a_id_fkey(nickname, avatar_url), profiles!matches_player_b_id_fkey(nickname, avatar_url)')
+      .select('*')
       .eq('group_id', groupId).eq('status', 'pending')
       .or(`player_a_id.eq.${user.id},player_b_id.eq.${user.id}`)
       .order('created_at', { ascending: false }).limit(5),
@@ -38,9 +38,15 @@ export default async function HomePage() {
       .order('created_at', { ascending: false }).limit(5),
   ]);
 
+  const pendingPlayerIds = [...new Set([
+    ...(pendingMatchesRaw ?? []).map(m => m.player_a_id as string),
+    ...(pendingMatchesRaw ?? []).map(m => m.player_b_id as string),
+  ])];
+
   const [
     { count: rankCount },
     { data: opponentProfiles },
+    { data: pendingProfiles },
   ] = await Promise.all([
     supabase.from('player_ratings').select('*', { count: 'exact', head: true })
       .eq('group_id', groupId).gt('rating', playerRating?.rating ?? 0),
@@ -48,10 +54,20 @@ export default async function HomePage() {
       ? supabase.from('profiles').select('user_id, nickname, avatar_url')
           .in('user_id', recentMatches!.map(m => m.opponent_id))
       : Promise.resolve({ data: [] as { user_id: string; nickname: string; avatar_url: string | null }[] }),
+    pendingPlayerIds.length > 0
+      ? supabase.from('profiles').select('user_id, nickname, avatar_url').in('user_id', pendingPlayerIds)
+      : Promise.resolve({ data: [] as { user_id: string; nickname: string; avatar_url: string | null }[] }),
   ]);
 
   const rank = (rankCount ?? 0) + 1;
   const opponentMap = new Map(opponentProfiles?.map(p => [p.user_id, p]) ?? []);
+
+  const pendingProfileMap = new Map(pendingProfiles?.map(p => [p.user_id, p]) ?? []);
+  const pendingMatches = (pendingMatchesRaw ?? []).map(m => ({
+    ...m,
+    'profiles!matches_player_a_id_fkey': pendingProfileMap.get(m.player_a_id) ?? null,
+    'profiles!matches_player_b_id_fkey': pendingProfileMap.get(m.player_b_id) ?? null,
+  }));
 
   return (
     <div className="px-4 pt-6 space-y-5 max-w-lg mx-auto">
@@ -68,9 +84,6 @@ export default async function HomePage() {
             <ChevronDown className="h-2.5 w-2.5 text-[var(--color-muted-foreground)] group-hover:text-[var(--color-primary)] transition-colors" />
           </Link>
           <h1 className="text-2xl font-black tracking-tight">{profile.nickname}</h1>
-        </div>
-        <div className="w-10 h-10 rounded-xl bg-[var(--color-card-elevated)] border border-[var(--color-border)] flex items-center justify-center text-lg shadow-card">
-          🏓
         </div>
       </div>
 
