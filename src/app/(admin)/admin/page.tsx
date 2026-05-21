@@ -21,12 +21,24 @@ export default async function AdminPage() {
   const groupId = memberData.group_id;
 
   // メンバー一覧
-  const { data: members } = await supabase
+  const { data: memberRows } = await supabase
     .from('group_members')
-    .select('*, profiles(nickname, avatar_url), player_ratings!inner(rating, wins, losses, approved_match_count, is_provisional)')
+    .select('*, player_ratings(rating, wins, losses, approved_match_count, is_provisional)')
     .eq('group_id', groupId)
     .eq('status', 'active')
     .order('created_at');
+
+  const memberUserIds = memberRows?.map(m => m.user_id) ?? [];
+  const { data: profileRows } = memberUserIds.length > 0
+    ? await supabase.from('profiles').select('user_id, nickname, avatar_url').in('user_id', memberUserIds)
+    : { data: [] as { user_id: string; nickname: string; avatar_url: string | null }[] };
+  const profileMap = new Map(profileRows?.map(p => [p.user_id, p]) ?? []);
+
+  const members = (memberRows ?? []).map(m => ({
+    ...m,
+    profiles: profileMap.get(m.user_id) ?? null,
+    player_ratings: Array.isArray(m.player_ratings) ? m.player_ratings[0] ?? null : m.player_ratings ?? null,
+  }));
 
   // pending 試合
   const { data: pendingMatches } = await supabase

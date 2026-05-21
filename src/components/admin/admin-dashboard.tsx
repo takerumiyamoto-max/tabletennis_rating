@@ -13,8 +13,9 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from '@/hooks/use-toast';
 import {
   Users, Clock, Settings, Tag, XCircle, ShieldCheck,
-  Loader2, Plus, Pencil, Save, X, Power,
+  Loader2, Plus, Pencil, Save, X, Power, UserMinus,
 } from 'lucide-react';
+import { removeMember } from '@/app/actions/groups';
 import { formatDateTime } from '@/lib/utils';
 import type { MemberRole, GroupRatingSettings, InitialRatingLabel } from '@/types/database';
 
@@ -127,6 +128,20 @@ export function AdminDashboard({
       toast({ title: '権限を変更しました', variant: 'success' });
     } catch {
       toast({ title: 'エラー', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRemoveMember(userId: string, nickname: string) {
+    if (!confirm(`${nickname} をグループから削除しますか？`)) return;
+    setLoading(true);
+    try {
+      const result = await removeMember(groupId, userId);
+      if (result.error) throw new Error(result.error);
+      toast({ title: `${nickname} を削除しました`, variant: 'success' });
+    } catch (err: unknown) {
+      toast({ title: 'エラー', description: err instanceof Error ? err.message : '失敗しました', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -368,18 +383,27 @@ export function AdminDashboard({
                       {pr ? `${Math.round(Number(pr.rating ?? 0))} pt · ${pr.wins ?? 0}勝` : 'レートなし'}
                     </p>
                   </div>
-                  {myRole === 'owner' && m.user_id !== currentUserId && (
+                  {(myRole === 'owner' || myRole === 'admin') && m.user_id !== currentUserId && m.role !== 'owner' && (
                     <div className="flex gap-1 shrink-0">
-                      {m.role !== 'admin' && (
+                      {myRole === 'owner' && m.role !== 'admin' && (
                         <Button size="sm" variant="outline" className="h-7 text-xs px-2" onClick={() => changeRole(m.user_id, 'admin')} disabled={loading}>
                           <ShieldCheck className="h-3 w-3 mr-0.5" />管理者に
                         </Button>
                       )}
-                      {m.role === 'admin' && (
+                      {myRole === 'owner' && m.role === 'admin' && (
                         <Button size="sm" variant="outline" className="h-7 text-xs px-2" onClick={() => changeRole(m.user_id, 'member')} disabled={loading}>
                           メンバーに
                         </Button>
                       )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs px-2 text-[var(--color-loss)] hover:text-[var(--color-loss)] hover:border-[var(--color-loss)]/50"
+                        onClick={() => handleRemoveMember(m.user_id, m.profiles?.nickname ?? '?')}
+                        disabled={loading}
+                      >
+                        <UserMinus className="h-3 w-3 mr-0.5" />削除
+                      </Button>
                     </div>
                   )}
                 </div>

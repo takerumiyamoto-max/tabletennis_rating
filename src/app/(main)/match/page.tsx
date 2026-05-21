@@ -13,17 +13,23 @@ export default async function MatchPage() {
   const groupId = memberData.group_id;
   const supabase = await createClient();
 
-  const { data: members } = await supabase
+  const { data: memberRows } = await supabase
     .from('group_members')
-    .select('user_id, profiles(nickname, avatar_url)')
+    .select('user_id')
     .eq('group_id', groupId)
     .eq('status', 'active')
     .neq('user_id', user.id);
 
-  const opponents = members?.map(m => ({
-    user_id: m.user_id,
-    nickname: (m.profiles as unknown as { nickname: string; avatar_url: string | null } | null)?.nickname ?? '?',
-    avatar_url: (m.profiles as unknown as { nickname: string; avatar_url: string | null } | null)?.avatar_url ?? null,
+  const memberUserIds = memberRows?.map(m => m.user_id) ?? [];
+
+  const { data: memberProfiles } = memberUserIds.length > 0
+    ? await supabase.from('profiles').select('user_id, nickname, avatar_url').in('user_id', memberUserIds)
+    : { data: [] as { user_id: string; nickname: string; avatar_url: string | null }[] };
+
+  const opponents = memberProfiles?.map(p => ({
+    user_id: p.user_id,
+    nickname: p.nickname,
+    avatar_url: p.avatar_url,
   })) ?? [];
 
   return (
