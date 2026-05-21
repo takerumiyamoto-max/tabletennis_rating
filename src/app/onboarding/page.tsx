@@ -130,8 +130,9 @@ export default function OnboardingPage() {
         .from('groups')
         .select('id')
         .eq('slug', joinSlug.trim())
-        .single();
-      if (groupError || !group) throw new Error('グループが見つかりません');
+        .maybeSingle();
+      if (groupError) throw new Error(groupError.message);
+      if (!group) throw new Error('グループが見つかりません（招待コードを確認してください）');
 
       const { error: memberError } = await supabase.from('group_members').insert({
         group_id: group.id, user_id: user.id, role: 'member', status: 'active', joined_at: new Date().toISOString(),
