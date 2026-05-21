@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { RatingChart } from '@/components/profile/rating-chart';
 import { MyStatsCard } from '@/components/profile/my-stats-card';
 import { ProfileEditForm } from '@/components/profile/profile-edit-form';
+import { SignOutButton } from '@/components/profile/sign-out-button';
 import type { RatingChartPoint } from '@/types/app';
 import type { RatingHistory } from '@/types/database';
 
@@ -137,6 +138,8 @@ export default async function ProfilePage() {
           管理者画面 →
         </Link>
       )}
+
+      <SignOutButton />
     </div>
   );
 }
