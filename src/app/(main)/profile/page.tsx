@@ -101,10 +101,13 @@ export default async function ProfilePage() {
 
   return (
     <div className="px-4 pt-6 pb-4 max-w-lg mx-auto space-y-5">
-      <h1 className="text-xl font-bold">マイページ</h1>
-
-      {/* プロフィール編集 */}
-      <ProfileEditForm profile={profile} />
+      {/* プロフィールヒーロー */}
+      <ProfileEditForm
+        profile={profile}
+        rating={playerRating ? Number(playerRating.rating) : undefined}
+        rank={rank}
+        isProvisional={playerRating?.is_provisional}
+      />
 
       {/* 統計カード */}
       {playerRating && (

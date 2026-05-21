@@ -1,5 +1,8 @@
+'use client';
+
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { StaggerList, StaggerItem } from '@/components/ui/motion';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { RankingEntry } from '@/types/app';
@@ -46,7 +49,7 @@ export function RankingList({ entries, currentUserId }: RankingListProps) {
   }
 
   return (
-    <div className="space-y-2">
+    <StaggerList className="space-y-2">
       {entries.map((entry) => {
         const isMe = entry.user_id === currentUserId;
         const winRate = entry.wins + entry.losses > 0
@@ -57,8 +60,8 @@ export function RankingList({ entries, currentUserId }: RankingListProps) {
         const topStyle = entry.rank <= 3 ? RANK_STYLES[entry.rank - 1] : null;
 
         return (
+          <StaggerItem key={entry.user_id}>
           <div
-            key={entry.user_id}
             className={cn(
               'flex items-center gap-3 p-3 rounded-xl border transition-all',
               topStyle ? `${topStyle.bg} ${topStyle.border}` : isMe
@@ -156,8 +159,9 @@ export function RankingList({ entries, currentUserId }: RankingListProps) {
               )}
             </div>
           </div>
+          </StaggerItem>
         );
       })}
-    </div>
+    </StaggerList>
   );
 }

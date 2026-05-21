@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { StaggerList, StaggerItem } from '@/components/ui/motion';
 import { Bell, ChevronRight, Clock } from 'lucide-react';
 import { formatDateTime } from '@/lib/utils';
 
@@ -22,7 +25,7 @@ export function PendingApprovals({ matches, userId }: PendingApprovalsProps) {
         </span>
       </div>
 
-      <div className="space-y-2">
+      <StaggerList className="space-y-2">
         {matches.map((match) => {
           const isApprovalTarget = match.player_b_id === userId && match.submitted_by !== userId;
           const isPlayerA = match.player_a_id === userId;
@@ -32,45 +35,46 @@ export function PendingApprovals({ matches, userId }: PendingApprovalsProps) {
           const opponentName = opponent?.nickname ?? '?';
 
           return (
-            <Link
-              key={match.id}
-              href={`/match/${match.id}/approve`}
-              className="flex items-center gap-3 p-3 rounded-xl border transition-all overflow-hidden relative group"
-              style={{
-                borderColor: isApprovalTarget ? 'rgba(245,158,11,0.5)' : 'var(--color-border)',
-                background: isApprovalTarget
-                  ? 'linear-gradient(135deg, rgba(245,158,11,0.08) 0%, var(--color-card) 60%)'
-                  : 'var(--color-card)',
-                boxShadow: isApprovalTarget ? '0 2px 12px rgba(245,158,11,0.1)' : undefined,
-              }}
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate">
-                  {isApprovalTarget
-                    ? <><span className="text-[var(--color-provisional)]">{opponentName}</span> から承認依頼</>
-                    : <>{opponentName} へ承認依頼中</>
-                  }
-                </p>
-                <div className="flex items-center gap-1 mt-0.5">
-                  <Clock className="h-3 w-3 text-[var(--color-muted-foreground)]" />
-                  <p className="text-[10px] text-[var(--color-muted-foreground)]">{formatDateTime(match.created_at)}</p>
+            <StaggerItem key={match.id}>
+              <Link
+                href={`/match/${match.id}/approve`}
+                className="flex items-center gap-3 p-3 rounded-xl border transition-all overflow-hidden relative group"
+                style={{
+                  borderColor: isApprovalTarget ? 'rgba(245,158,11,0.5)' : 'var(--color-border)',
+                  background: isApprovalTarget
+                    ? 'linear-gradient(135deg, rgba(245,158,11,0.08) 0%, var(--color-card) 60%)'
+                    : 'var(--color-card)',
+                  boxShadow: isApprovalTarget ? '0 2px 12px rgba(245,158,11,0.1)' : undefined,
+                }}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">
+                    {isApprovalTarget
+                      ? <><span className="text-[var(--color-provisional)]">{opponentName}</span> から承認依頼</>
+                      : <>{opponentName} へ承認依頼中</>
+                    }
+                  </p>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <Clock className="h-3 w-3 text-[var(--color-muted-foreground)]" />
+                    <p className="text-[10px] text-[var(--color-muted-foreground)]">{formatDateTime(match.created_at)}</p>
+                  </div>
                 </div>
-              </div>
 
-              {isApprovalTarget ? (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--color-provisional)]/15 border border-[var(--color-provisional)]/30 text-[var(--color-provisional)] text-xs font-bold shrink-0 group-hover:bg-[var(--color-provisional)]/25 transition-colors">
-                  承認する
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </div>
-              ) : (
-                <div className="text-[var(--color-muted-foreground)] text-xs shrink-0">
-                  <ChevronRight className="h-4 w-4" />
-                </div>
-              )}
-            </Link>
+                {isApprovalTarget ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--color-provisional)]/15 border border-[var(--color-provisional)]/30 text-[var(--color-provisional)] text-xs font-bold shrink-0 group-hover:bg-[var(--color-provisional)]/25 transition-colors">
+                    承認する
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </div>
+                ) : (
+                  <div className="text-[var(--color-muted-foreground)] text-xs shrink-0">
+                    <ChevronRight className="h-4 w-4" />
+                  </div>
+                )}
+              </Link>
+            </StaggerItem>
           );
         })}
-      </div>
+      </StaggerList>
     </div>
   );
 }
