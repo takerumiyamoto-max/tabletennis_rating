@@ -23,20 +23,22 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  // getSession() reads the JWT cookie locally (no network call).
+  // getUser() for actual security happens inside page/layout handlers.
+  const { data: { session } } = await supabase.auth.getSession();
 
   const { pathname } = request.nextUrl;
 
-  const publicPaths = ['/login', '/signup', '/auth/callback'];
+  const publicPaths = ['/login', '/signup', '/callback'];
   const isPublicPath = publicPaths.some(p => pathname.startsWith(p));
 
-  if (!user && !isPublicPath) {
+  if (!session && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }
 
-  if (user && (pathname === '/login' || pathname === '/signup')) {
+  if (session && (pathname === '/login' || pathname === '/signup')) {
     const url = request.nextUrl.clone();
     url.pathname = '/';
     return NextResponse.redirect(url);
