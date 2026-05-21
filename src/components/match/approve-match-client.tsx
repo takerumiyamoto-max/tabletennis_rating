@@ -47,17 +47,13 @@ export function ApproveMatchClient({ match, playerA, playerB, currentUserId }: P
     try {
       const supabase = createClient();
 
-      const { data: settings } = await supabase
-        .from('group_rating_settings')
-        .select('*')
-        .eq('group_id', match.group_id)
-        .single();
-
-      const { data: ratings } = await supabase
-        .from('player_ratings')
-        .select('*')
-        .eq('group_id', match.group_id)
-        .in('user_id', [match.player_a_id, match.player_b_id]);
+      const [{ data: settings }, { data: ratings }] = await Promise.all([
+        supabase.from('group_rating_settings').select('*').eq('group_id', match.group_id).single(),
+        supabase.from('player_ratings')
+          .select('user_id, rating, approved_match_count')
+          .eq('group_id', match.group_id)
+          .in('user_id', [match.player_a_id, match.player_b_id]),
+      ]);
 
       const ratingA = ratings?.find(r => r.user_id === match.player_a_id);
       const ratingB = ratings?.find(r => r.user_id === match.player_b_id);
@@ -65,26 +61,22 @@ export function ApproveMatchClient({ match, playerA, playerB, currentUserId }: P
 
       const ratingSettings = settings ? toRatingSettings(settings) : undefined;
       const result = calculateRatingUpdate(
-        { playerAId: match.player_a_id, playerBId: match.player_b_id, winnerId: match.winner_id, format: match.match_format, playerASets: match.player_a_sets, playerBSets: match.player_b_sets },
+        { playerAId: match.player_a_id, playerBId: match.player_b_id, winnerId: match.winner_id,
+          format: match.match_format, playerASets: match.player_a_sets, playerBSets: match.player_b_sets },
         { userId: match.player_a_id, rating: Number(ratingA.rating), approvedMatchCount: ratingA.approved_match_count },
         { userId: match.player_b_id, rating: Number(ratingB.rating), approvedMatchCount: ratingB.approved_match_count },
         ratingSettings
       );
 
-      const now = new Date().toISOString();
-      const { error: matchError } = await supabase.from('matches').update({ status: 'approved', approved_by: currentUserId, approved_at: now }).eq('id', match.id);
-      if (matchError) throw matchError;
-
-      await supabase.from('rating_histories').insert([
-        { group_id: match.group_id, match_id: match.id, user_id: match.player_a_id, opponent_id: match.player_b_id, rating_before: result.playerA.ratingBefore, rating_after: result.playerA.ratingAfter, rating_change: result.playerA.ratingChange, result: result.playerA.result },
-        { group_id: match.group_id, match_id: match.id, user_id: match.player_b_id, opponent_id: match.player_a_id, rating_before: result.playerB.ratingBefore, rating_after: result.playerB.ratingAfter, rating_change: result.playerB.ratingChange, result: result.playerB.result },
-      ]);
-
-      const streakA = result.playerA.result === 'win' ? Math.max(ratingA.current_streak, 0) + 1 : Math.min(ratingA.current_streak, 0) - 1;
-      await supabase.from('player_ratings').update({ rating: result.playerA.ratingAfter, wins: ratingA.wins + (result.playerA.result === 'win' ? 1 : 0), losses: ratingA.losses + (result.playerA.result === 'loss' ? 1 : 0), approved_match_count: ratingA.approved_match_count + 1, current_streak: streakA, highest_rating: Math.max(Number(ratingA.highest_rating), result.playerA.ratingAfter), lowest_rating: Math.min(Number(ratingA.lowest_rating), result.playerA.ratingAfter) }).eq('group_id', match.group_id).eq('user_id', match.player_a_id);
-
-      const streakB = result.playerB.result === 'win' ? Math.max(ratingB.current_streak, 0) + 1 : Math.min(ratingB.current_streak, 0) - 1;
-      await supabase.from('player_ratings').update({ rating: result.playerB.ratingAfter, wins: ratingB.wins + (result.playerB.result === 'win' ? 1 : 0), losses: ratingB.losses + (result.playerB.result === 'loss' ? 1 : 0), approved_match_count: ratingB.approved_match_count + 1, current_streak: streakB, highest_rating: Math.max(Number(ratingB.highest_rating), result.playerB.ratingAfter), lowest_rating: Math.min(Number(ratingB.lowest_rating), result.playerB.ratingAfter) }).eq('group_id', match.group_id).eq('user_id', match.player_b_id);
+      // SECURITY DEFINER 関数経由で書き込む（RLS 制限を回避するため）
+      const { error } = await supabase.rpc('approve_match_with_ratings', {
+        p_match_id:       match.id,
+        p_a_rating_after: result.playerA.ratingAfter,
+        p_a_result:       result.playerA.result,
+        p_b_rating_after: result.playerB.ratingAfter,
+        p_b_result:       result.playerB.result,
+      });
+      if (error) throw error;
 
       toast({ title: '承認完了', description: 'レートが更新されました', variant: 'success' });
       router.push('/');
