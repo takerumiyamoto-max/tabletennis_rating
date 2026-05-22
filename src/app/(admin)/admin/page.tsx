@@ -83,6 +83,13 @@ export default async function AdminPage() {
     .eq('group_id', groupId)
     .order('sort_order');
 
+  // シーズン（テーブルが存在しない場合はnullを渡す）
+  const { data: seasons } = await supabase
+    .from('seasons')
+    .select('*')
+    .eq('group_id', groupId)
+    .order('started_at', { ascending: false });
+
   return (
     <AdminDashboard
       groupId={groupId}
@@ -92,6 +99,7 @@ export default async function AdminPage() {
       pendingMatches={pendingMatches ?? []}
       ratingSettings={ratingSettings}
       labels={labels ?? []}
+      seasons={seasons ?? null}
       currentUserId={user.id}
     />
   );

@@ -12,12 +12,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/hooks/use-toast';
 import {
-  Users, Clock, Settings, Tag, XCircle, ShieldCheck,
-  Loader2, Plus, Pencil, Save, X, Power, UserMinus, RefreshCw,
+  Users, Clock, Settings, Tag, XCircle, ShieldCheck, CalendarDays,
+  Loader2, Plus, Pencil, Save, X, Power, UserMinus, RefreshCw, CheckCircle, Edit2,
 } from 'lucide-react';
 import { removeMember, changeMyInitialRating } from '@/app/actions/groups';
-import { formatDateTime } from '@/lib/utils';
+import { adminApproveMatch, updateMemberRating, startNewSeason } from '@/app/actions/admin';
+import { formatDateTime, formatDate } from '@/lib/utils';
 import type { MemberRole, GroupRatingSettings, InitialRatingLabel } from '@/types/database';
+import type { Season } from '@/types/database';
 
 // ─── 型 ──────────────────────────────────────────────────────
 
@@ -54,6 +56,7 @@ interface Props {
   ratingSettings: GroupRatingSettings | null;
   labels: InitialRatingLabel[];
   currentUserId: string;
+  seasons: Season[] | null;
 }
 
 const EMPTY_LABEL: LabelForm = {
@@ -80,21 +83,36 @@ function toSettingsForm(s: GroupRatingSettings | null): SettingsForm {
 
 export function AdminDashboard({
   groupId, group, myRole, members, pendingMatches,
-  ratingSettings: initialSettings, labels: initialLabels, currentUserId,
+  ratingSettings: initialSettings, labels: initialLabels, currentUserId, seasons: initialSeasons,
 }: Props) {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading]                   = useState(false);
   const [changingMyRating, setChangingMyRating] = useState(false);
-  const [myRatingLabelId, setMyRatingLabelId] = useState<string | null>(null);
+  const [myRatingLabelId, setMyRatingLabelId]   = useState<string | null>(null);
+
+  // レート直接編集
+  const [editingRatingUserId, setEditingRatingUserId] = useState<string | null>(null);
+  const [editingRatingValue, setEditingRatingValue]   = useState('');
 
   // ラベル
   const [labels, setLabels]             = useState<InitialRatingLabel[]>(initialLabels);
-  const [editingId, setEditingId]       = useState<string | null>(null); // 'new' or label.id
+  const [editingId, setEditingId]       = useState<string | null>(null);
   const [labelForm, setLabelForm]       = useState<LabelForm>(EMPTY_LABEL);
   const [labelLoading, setLabelLoading] = useState(false);
 
   // レート設定
-  const [settingsForm, setSettingsForm]     = useState<SettingsForm>(() => toSettingsForm(initialSettings));
-  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsForm, setSettingsForm]         = useState<SettingsForm>(() => toSettingsForm(initialSettings));
+  const [settingsLoading, setSettingsLoading]   = useState(false);
+
+  // シーズン
+  const [seasons]                            = useState<Season[] | null>(initialSeasons);
+  const [newSeasonName, setNewSeasonName]   = useState('');
+  const [carryoverFactor, setCarryoverFactor] = useState('0.7');
+  const [carryoverBase, setCarryoverBase]   = useState('1500');
+  const [seasonLoading, setSeasonLoading]   = useState(false);
+  const [showNewSeasonForm, setShowNewSeasonForm] = useState(false);
+
+  // 承認待ちローカル状態（承認/取消後に即消す）
+  const [localPending, setLocalPending] = useState(pendingMatches);
 
   const roleLabel: Record<MemberRole, string> = { owner: 'オーナー', admin: '管理者', member: 'メンバー' };
 
@@ -105,14 +123,27 @@ export function AdminDashboard({
     try {
       const supabase = createClient();
       const { error } = await supabase.from('matches').update({
-        status: 'cancelled',
-        cancelled_by: currentUserId,
-        cancelled_at: new Date().toISOString(),
+        status: 'cancelled', cancelled_by: currentUserId, cancelled_at: new Date().toISOString(),
       }).eq('id', matchId);
       if (error) throw error;
+      setLocalPending(prev => prev.filter((m: { id: string }) => m.id !== matchId));
       toast({ title: '試合をキャンセルしました', variant: 'success' });
     } catch {
       toast({ title: 'エラー', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleAdminApprove(matchId: string) {
+    setLoading(true);
+    try {
+      const result = await adminApproveMatch(matchId);
+      if (result.error) throw new Error(result.error);
+      setLocalPending(prev => prev.filter((m: { id: string }) => m.id !== matchId));
+      toast({ title: '承認しました', variant: 'success' });
+    } catch (err: unknown) {
+      toast({ title: 'エラー', description: err instanceof Error ? err.message : '失敗しました', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -164,15 +195,29 @@ export function AdminDashboard({
     }
   }
 
+  async function handleSaveRating(userId: string) {
+    const val = parseFloat(editingRatingValue);
+    if (isNaN(val)) { toast({ title: '無効な値です', variant: 'destructive' }); return; }
+    setLoading(true);
+    try {
+      const result = await updateMemberRating(groupId, userId, val);
+      if (result.error) throw new Error(result.error);
+      toast({ title: 'レートを更新しました', variant: 'success' });
+      setEditingRatingUserId(null);
+    } catch (err: unknown) {
+      toast({ title: 'エラー', description: err instanceof Error ? err.message : '失敗しました', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   // ─── ラベル操作 ─────────────────────────────────────────────
 
   function startEdit(label: InitialRatingLabel) {
     setEditingId(label.id);
     setLabelForm({
-      label: label.label,
-      description: label.description ?? '',
-      initial_rating: String(label.initial_rating),
-      sort_order: String(label.sort_order),
+      label: label.label, description: label.description ?? '',
+      initial_rating: String(label.initial_rating), sort_order: String(label.sort_order),
       is_active: label.is_active,
     });
   }
@@ -188,13 +233,12 @@ export function AdminDashboard({
     const initial_rating = parseInt(labelForm.initial_rating);
     const sort_order     = parseInt(labelForm.sort_order);
     if (!labelForm.label.trim() || isNaN(initial_rating) || initial_rating < 0) {
-      toast({ title: 'ラベル名と初期レートは必須です', variant: 'destructive' });
-      return;
+      toast({ title: 'ラベル名と初期レートは必須です', variant: 'destructive' }); return;
     }
     setLabelLoading(true);
     try {
       const supabase = createClient();
-      const payload = {
+      const payload  = {
         label:          labelForm.label.trim(),
         description:    labelForm.description.trim() || null,
         initial_rating,
@@ -203,25 +247,13 @@ export function AdminDashboard({
       };
       if (editingId === 'new') {
         const { data, error } = await supabase
-          .from('initial_rating_labels')
-          .insert({ group_id: groupId, ...payload })
-          .select()
-          .single();
+          .from('initial_rating_labels').insert({ group_id: groupId, ...payload }).select().single();
         if (error) throw error;
-        setLabels(prev =>
-          [...prev, data as unknown as InitialRatingLabel]
-            .sort((a, b) => a.sort_order - b.sort_order)
-        );
+        setLabels(prev => [...prev, data as unknown as InitialRatingLabel].sort((a, b) => a.sort_order - b.sort_order));
       } else {
-        const { error } = await supabase
-          .from('initial_rating_labels')
-          .update(payload)
-          .eq('id', editingId!);
+        const { error } = await supabase.from('initial_rating_labels').update(payload).eq('id', editingId!);
         if (error) throw error;
-        setLabels(prev =>
-          prev.map(l => l.id === editingId ? { ...l, ...payload } : l)
-            .sort((a, b) => a.sort_order - b.sort_order)
-        );
+        setLabels(prev => prev.map(l => l.id === editingId ? { ...l, ...payload } : l).sort((a, b) => a.sort_order - b.sort_order));
       }
       toast({ title: 'ラベルを保存しました', variant: 'success' });
       setEditingId(null);
@@ -236,10 +268,7 @@ export function AdminDashboard({
     setLabelLoading(true);
     try {
       const supabase = createClient();
-      const { error } = await supabase
-        .from('initial_rating_labels')
-        .update({ is_active: !label.is_active })
-        .eq('id', label.id);
+      const { error } = await supabase.from('initial_rating_labels').update({ is_active: !label.is_active }).eq('id', label.id);
       if (error) throw error;
       setLabels(prev => prev.map(l => l.id === label.id ? { ...l, is_active: !l.is_active } : l));
       toast({ title: label.is_active ? '無効にしました' : '有効にしました', variant: 'success' });
@@ -256,28 +285,45 @@ export function AdminDashboard({
     setSettingsLoading(true);
     try {
       const supabase = createClient();
-      const { error } = await supabase
-        .from('group_rating_settings')
-        .update({
-          elo_scale:                      parseInt(settingsForm.elo_scale),
-          k_new:                          parseInt(settingsForm.k_new),
-          k_normal:                       parseInt(settingsForm.k_normal),
-          k_stable:                       parseInt(settingsForm.k_stable),
-          new_until_matches:              parseInt(settingsForm.new_until_matches),
-          stable_from_matches:            parseInt(settingsForm.stable_from_matches),
-          best_of_3_straight_multiplier:  parseFloat(settingsForm.best_of_3_straight_multiplier),
-          best_of_3_full_multiplier:      parseFloat(settingsForm.best_of_3_full_multiplier),
-          best_of_5_straight_multiplier:  parseFloat(settingsForm.best_of_5_straight_multiplier),
-          best_of_5_four_game_multiplier: parseFloat(settingsForm.best_of_5_four_game_multiplier),
-          best_of_5_full_multiplier:      parseFloat(settingsForm.best_of_5_full_multiplier),
-        })
-        .eq('group_id', groupId);
+      const { error } = await supabase.from('group_rating_settings').update({
+        elo_scale:                      parseInt(settingsForm.elo_scale),
+        k_new:                          parseInt(settingsForm.k_new),
+        k_normal:                       parseInt(settingsForm.k_normal),
+        k_stable:                       parseInt(settingsForm.k_stable),
+        new_until_matches:              parseInt(settingsForm.new_until_matches),
+        stable_from_matches:            parseInt(settingsForm.stable_from_matches),
+        best_of_3_straight_multiplier:  parseFloat(settingsForm.best_of_3_straight_multiplier),
+        best_of_3_full_multiplier:      parseFloat(settingsForm.best_of_3_full_multiplier),
+        best_of_5_straight_multiplier:  parseFloat(settingsForm.best_of_5_straight_multiplier),
+        best_of_5_four_game_multiplier: parseFloat(settingsForm.best_of_5_four_game_multiplier),
+        best_of_5_full_multiplier:      parseFloat(settingsForm.best_of_5_full_multiplier),
+      }).eq('group_id', groupId);
       if (error) throw error;
       toast({ title: 'レート設定を保存しました', variant: 'success' });
     } catch (err: unknown) {
       toast({ title: 'エラー', description: err instanceof Error ? err.message : '失敗しました', variant: 'destructive' });
     } finally {
       setSettingsLoading(false);
+    }
+  }
+
+  // ─── シーズン操作 ───────────────────────────────────────────
+
+  async function handleStartNewSeason() {
+    if (!confirm(`新しいシーズン「${newSeasonName}」を開始しますか？\n現在のレートがスナップショットされ、引き継ぎ率 ${carryoverFactor} でリセットされます。`)) return;
+    setSeasonLoading(true);
+    try {
+      const result = await startNewSeason(groupId, newSeasonName, parseFloat(carryoverFactor), parseInt(carryoverBase));
+      if (result.error) throw new Error(result.error);
+      toast({ title: `シーズン「${newSeasonName}」を開始しました`, variant: 'success' });
+      setShowNewSeasonForm(false);
+      setNewSeasonName('');
+      // Refresh seasons from server by re-fetching — simple approach: reload
+      window.location.reload();
+    } catch (err: unknown) {
+      toast({ title: 'エラー', description: err instanceof Error ? err.message : '失敗しました', variant: 'destructive' });
+    } finally {
+      setSeasonLoading(false);
     }
   }
 
@@ -288,55 +334,27 @@ export function AdminDashboard({
       <CardContent className="pt-3 pb-3 space-y-2.5">
         <div className="grid grid-cols-2 gap-2">
           <div className="col-span-2 space-y-1">
-            <Label className="text-xs">
-              ラベル名 <span className="text-[var(--color-loss)]">*</span>
-            </Label>
-            <Input
-              value={labelForm.label}
-              onChange={e => setLabelForm(f => ({ ...f, label: e.target.value }))}
-              placeholder="例: 高校経験者"
-              className="h-8 text-sm"
-            />
+            <Label className="text-xs">ラベル名 <span className="text-[var(--color-loss)]">*</span></Label>
+            <Input value={labelForm.label} onChange={e => setLabelForm(f => ({ ...f, label: e.target.value }))} placeholder="例: 高校経験者" className="h-8 text-sm" />
           </div>
           <div className="col-span-2 space-y-1">
             <Label className="text-xs">説明（任意）</Label>
-            <Input
-              value={labelForm.description}
-              onChange={e => setLabelForm(f => ({ ...f, description: e.target.value }))}
-              placeholder="例: 高校で部活経験がある方"
-              className="h-8 text-sm"
-            />
+            <Input value={labelForm.description} onChange={e => setLabelForm(f => ({ ...f, description: e.target.value }))} placeholder="例: 高校で部活経験がある方" className="h-8 text-sm" />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">
-              初期レート <span className="text-[var(--color-loss)]">*</span>
-            </Label>
-            <Input
-              type="number"
-              min="0"
-              value={labelForm.initial_rating}
-              onChange={e => setLabelForm(f => ({ ...f, initial_rating: e.target.value }))}
-              className="h-8 text-sm font-mono"
-            />
+            <Label className="text-xs">初期レート <span className="text-[var(--color-loss)]">*</span></Label>
+            <Input type="number" min="0" value={labelForm.initial_rating} onChange={e => setLabelForm(f => ({ ...f, initial_rating: e.target.value }))} className="h-8 text-sm font-mono" />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">表示順</Label>
-            <Input
-              type="number"
-              min="0"
-              value={labelForm.sort_order}
-              onChange={e => setLabelForm(f => ({ ...f, sort_order: e.target.value }))}
-              className="h-8 text-sm font-mono"
-            />
+            <Input type="number" min="0" value={labelForm.sort_order} onChange={e => setLabelForm(f => ({ ...f, sort_order: e.target.value }))} className="h-8 text-sm font-mono" />
           </div>
         </div>
         <button
           type="button"
           onClick={() => setLabelForm(f => ({ ...f, is_active: !f.is_active }))}
           className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-colors ${
-            labelForm.is_active
-              ? 'border-[var(--color-win)] text-[var(--color-win)]'
-              : 'border-[var(--color-muted-foreground)] text-[var(--color-muted-foreground)]'
+            labelForm.is_active ? 'border-[var(--color-win)] text-[var(--color-win)]' : 'border-[var(--color-muted-foreground)] text-[var(--color-muted-foreground)]'
           }`}
         >
           {labelForm.is_active ? '有効' : '無効'}（クリックで切り替え）
@@ -346,10 +364,7 @@ export function AdminDashboard({
             <X className="h-3.5 w-3.5 mr-1" />キャンセル
           </Button>
           <Button type="button" size="sm" className="flex-1 h-8" onClick={handleSaveLabel} disabled={labelLoading}>
-            {labelLoading
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-              : <Save className="h-3.5 w-3.5 mr-1" />
-            }
+            {labelLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Save className="h-3.5 w-3.5 mr-1" />}
             保存
           </Button>
         </div>
@@ -361,17 +376,18 @@ export function AdminDashboard({
 
   return (
     <Tabs defaultValue="members">
-      <TabsList className="w-full mb-5 grid grid-cols-4">
-        <TabsTrigger value="members"  className="text-xs"><Users   className="h-3.5 w-3.5 mr-1" />メンバー</TabsTrigger>
+      <TabsList className="w-full mb-5 grid grid-cols-5">
+        <TabsTrigger value="members"  className="text-xs"><Users className="h-3.5 w-3.5 mr-1" />メンバー</TabsTrigger>
         <TabsTrigger value="pending"  className="text-xs relative">
           <Clock className="h-3.5 w-3.5 mr-1" />承認待ち
-          {pendingMatches.length > 0 && (
+          {localPending.length > 0 && (
             <span className="absolute -top-1 -right-1 bg-[var(--color-provisional)] text-black rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">
-              {pendingMatches.length}
+              {localPending.length}
             </span>
           )}
         </TabsTrigger>
-        <TabsTrigger value="labels"   className="text-xs"><Tag      className="h-3.5 w-3.5 mr-1" />ラベル</TabsTrigger>
+        <TabsTrigger value="labels"   className="text-xs"><Tag className="h-3.5 w-3.5 mr-1" />ラベル</TabsTrigger>
+        <TabsTrigger value="season"   className="text-xs"><CalendarDays className="h-3.5 w-3.5 mr-1" />シーズン</TabsTrigger>
         <TabsTrigger value="settings" className="text-xs"><Settings className="h-3.5 w-3.5 mr-1" />設定</TabsTrigger>
       </TabsList>
 
@@ -381,6 +397,8 @@ export function AdminDashboard({
         {members.map((m) => {
           const profile = m.profiles;
           const pr      = Array.isArray(m.player_ratings) ? m.player_ratings[0] : m.player_ratings;
+          const isEditingRating = editingRatingUserId === m.user_id;
+
           return (
             <Card key={m.id}>
               <CardContent className="pt-3 pb-3">
@@ -400,40 +418,70 @@ export function AdminDashboard({
                       {pr ? `${Math.round(Number(pr.rating ?? 0))} pt · ${pr.wins ?? 0}勝` : 'レートなし'}
                     </p>
                   </div>
-                  {m.user_id === currentUserId && (
-                    <Button
-                      size="sm" variant="outline"
-                      className="h-7 text-xs px-2 shrink-0"
-                      onClick={() => { setChangingMyRating(v => !v); setMyRatingLabelId(null); }}
-                      disabled={loading}
-                    >
-                      <RefreshCw className="h-3 w-3 mr-0.5" />初期レート変更
-                    </Button>
-                  )}
-                  {(myRole === 'owner' || myRole === 'admin') && m.user_id !== currentUserId && m.role !== 'owner' && (
-                    <div className="flex gap-1 shrink-0">
-                      {myRole === 'owner' && m.role !== 'admin' && (
-                        <Button size="sm" variant="outline" className="h-7 text-xs px-2" onClick={() => changeRole(m.user_id, 'admin')} disabled={loading}>
-                          <ShieldCheck className="h-3 w-3 mr-0.5" />管理者に
+
+                  <div className="flex gap-1 shrink-0 flex-wrap justify-end">
+                    {/* 自分の初期レート変更 */}
+                    {m.user_id === currentUserId && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs px-2"
+                        onClick={() => { setChangingMyRating(v => !v); setMyRatingLabelId(null); }} disabled={loading}>
+                        <RefreshCw className="h-3 w-3 mr-0.5" />初期レート
+                      </Button>
+                    )}
+                    {/* 管理者によるレート直接編集 */}
+                    {(myRole === 'owner' || myRole === 'admin') && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs px-2"
+                        onClick={() => {
+                          setEditingRatingUserId(m.user_id);
+                          setEditingRatingValue(String(Math.round(Number(pr?.rating ?? 0))));
+                        }} disabled={loading || isEditingRating}>
+                        <Edit2 className="h-3 w-3 mr-0.5" />レート
+                      </Button>
+                    )}
+                    {/* ロール変更 + 削除 */}
+                    {(myRole === 'owner' || myRole === 'admin') && m.user_id !== currentUserId && m.role !== 'owner' && (
+                      <>
+                        {myRole === 'owner' && m.role !== 'admin' && (
+                          <Button size="sm" variant="outline" className="h-7 text-xs px-2" onClick={() => changeRole(m.user_id, 'admin')} disabled={loading}>
+                            <ShieldCheck className="h-3 w-3 mr-0.5" />管理者に
+                          </Button>
+                        )}
+                        {myRole === 'owner' && m.role === 'admin' && (
+                          <Button size="sm" variant="outline" className="h-7 text-xs px-2" onClick={() => changeRole(m.user_id, 'member')} disabled={loading}>
+                            メンバーに
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline"
+                          className="h-7 text-xs px-2 text-[var(--color-loss)] hover:text-[var(--color-loss)] hover:border-[var(--color-loss)]/50"
+                          onClick={() => handleRemoveMember(m.user_id, m.profiles?.nickname ?? '?')} disabled={loading}>
+                          <UserMinus className="h-3 w-3 mr-0.5" />削除
                         </Button>
-                      )}
-                      {myRole === 'owner' && m.role === 'admin' && (
-                        <Button size="sm" variant="outline" className="h-7 text-xs px-2" onClick={() => changeRole(m.user_id, 'member')} disabled={loading}>
-                          メンバーに
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs px-2 text-[var(--color-loss)] hover:text-[var(--color-loss)] hover:border-[var(--color-loss)]/50"
-                        onClick={() => handleRemoveMember(m.user_id, m.profiles?.nickname ?? '?')}
-                        disabled={loading}
-                      >
-                        <UserMinus className="h-3 w-3 mr-0.5" />削除
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* レート直接編集パネル */}
+                {isEditingRating && (
+                  <div className="mt-3 pt-3 border-t border-[var(--color-border)] space-y-2">
+                    <p className="text-xs text-[var(--color-muted-foreground)]">新しいレートを入力</p>
+                    <div className="flex gap-2">
+                      <Input
+                        type="number" min="0" max="9999"
+                        value={editingRatingValue}
+                        onChange={e => setEditingRatingValue(e.target.value)}
+                        className="h-8 text-sm font-mono flex-1"
+                        onKeyDown={e => { if (e.key === 'Enter') handleSaveRating(m.user_id); if (e.key === 'Escape') setEditingRatingUserId(null); }}
+                        autoFocus
+                      />
+                      <Button type="button" variant="outline" size="sm" className="h-8 px-2" onClick={() => setEditingRatingUserId(null)}>
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button type="button" size="sm" className="h-8 px-3" onClick={() => handleSaveRating(m.user_id)} disabled={loading}>
+                        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                       </Button>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
 
                 {/* 自分の初期レート変更パネル */}
                 {m.user_id === currentUserId && changingMyRating && (
@@ -441,37 +489,24 @@ export function AdminDashboard({
                     <p className="text-xs text-[var(--color-muted-foreground)]">新しい初期レートラベルを選択</p>
                     <div className="space-y-1.5">
                       {labels.filter(l => l.is_active).map(l => (
-                        <button
-                          key={l.id}
-                          type="button"
-                          onClick={() => setMyRatingLabelId(l.id)}
+                        <button key={l.id} type="button" onClick={() => setMyRatingLabelId(l.id)}
                           className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-sm transition-all ${
                             myRatingLabelId === l.id
                               ? 'border-[var(--color-primary)] bg-[var(--color-neon-dim)] text-[var(--color-primary)]'
                               : 'border-[var(--color-border)] bg-[var(--color-card-elevated)] hover:border-[var(--color-primary)]/40'
-                          }`}
-                        >
+                          }`}>
                           <span className="font-medium">{l.label}</span>
                           <span className="font-mono text-xs">{l.initial_rating} pt</span>
                         </button>
                       ))}
                     </div>
                     <div className="flex gap-2 pt-1">
-                      <Button
-                        type="button" variant="outline" size="sm" className="flex-1 h-8"
-                        onClick={() => { setChangingMyRating(false); setMyRatingLabelId(null); }}
-                      >
+                      <Button type="button" variant="outline" size="sm" className="flex-1 h-8"
+                        onClick={() => { setChangingMyRating(false); setMyRatingLabelId(null); }}>
                         <X className="h-3.5 w-3.5 mr-1" />キャンセル
                       </Button>
-                      <Button
-                        type="button" size="sm" className="flex-1 h-8"
-                        onClick={handleChangeMyRating}
-                        disabled={!myRatingLabelId || loading}
-                      >
-                        {loading
-                          ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                          : <Save className="h-3.5 w-3.5 mr-1" />
-                        }
+                      <Button type="button" size="sm" className="flex-1 h-8" onClick={handleChangeMyRating} disabled={!myRatingLabelId || loading}>
+                        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Save className="h-3.5 w-3.5 mr-1" />}
                         変更する
                       </Button>
                     </div>
@@ -485,25 +520,36 @@ export function AdminDashboard({
 
       {/* ── 承認待ち ── */}
       <TabsContent value="pending" className="space-y-2">
-        {pendingMatches.length === 0 ? (
+        {localPending.length === 0 ? (
           <p className="text-center text-[var(--color-muted-foreground)] text-sm py-8">承認待ちの試合はありません</p>
-        ) : pendingMatches.map((m) => {
-          const pA = m['profiles!matches_player_a_id_fkey'];
-          const pB = m['profiles!matches_player_b_id_fkey'];
+        ) : localPending.map((m: { id: string; player_a_sets: number; player_b_sets: number; created_at: string; winner_id: string; player_a_id: string; player_b_id: string }) => {
+          const pA = (m as Record<string, { nickname?: string } | null>)['profiles!matches_player_a_id_fkey'];
+          const pB = (m as Record<string, { nickname?: string } | null>)['profiles!matches_player_b_id_fkey'];
+          const winnerIsA = m.winner_id === m.player_a_id;
           return (
             <Card key={m.id}>
               <CardContent className="pt-3 pb-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold">{pA?.nickname ?? '?'} vs {pB?.nickname ?? '?'}</p>
+                    <p className="text-sm font-semibold">
+                      <span className={winnerIsA ? 'text-[var(--color-win)]' : ''}>{pA?.nickname ?? '?'}</span>
+                      <span className="text-[var(--color-muted-foreground)] mx-1">vs</span>
+                      <span className={!winnerIsA ? 'text-[var(--color-win)]' : ''}>{pB?.nickname ?? '?'}</span>
+                    </p>
                     <p className="text-xs text-[var(--color-muted-foreground)]">
                       {m.player_a_sets} - {m.player_b_sets} · {formatDateTime(m.created_at)}
                     </p>
                   </div>
-                  <Button size="sm" variant="destructive" className="h-7 text-xs shrink-0" onClick={() => cancelMatch(m.id)} disabled={loading}>
-                    {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3 mr-0.5" />}
-                    取消
-                  </Button>
+                  <div className="flex gap-1.5 shrink-0">
+                    <Button size="sm" variant="win" className="h-7 text-xs" onClick={() => handleAdminApprove(m.id)} disabled={loading}>
+                      {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3 mr-0.5" />}
+                      承認
+                    </Button>
+                    <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => cancelMatch(m.id)} disabled={loading}>
+                      {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3 mr-0.5" />}
+                      取消
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -528,26 +574,16 @@ export function AdminDashboard({
                       <p className="text-sm font-semibold">{label.label}</p>
                       {!label.is_active && <Badge variant="secondary" className="text-[10px]">無効</Badge>}
                     </div>
-                    {label.description && (
-                      <p className="text-xs text-[var(--color-muted-foreground)]">{label.description}</p>
-                    )}
+                    {label.description && <p className="text-xs text-[var(--color-muted-foreground)]">{label.description}</p>}
                   </div>
                   <Badge variant="default" className="font-mono shrink-0">{label.initial_rating}</Badge>
                   <div className="flex gap-1 shrink-0">
-                    <Button
-                      size="icon-sm" variant="outline" className="h-7 w-7"
-                      onClick={() => startEdit(label)}
-                      disabled={labelLoading || editingId !== null}
-                    >
+                    <Button size="icon-sm" variant="outline" className="h-7 w-7" onClick={() => startEdit(label)} disabled={labelLoading || editingId !== null}>
                       <Pencil className="h-3 w-3" />
                     </Button>
-                    <Button
-                      size="icon-sm" variant="outline"
+                    <Button size="icon-sm" variant="outline"
                       className={`h-7 w-7 ${label.is_active ? 'text-[var(--color-win)]' : 'text-[var(--color-muted-foreground)]'}`}
-                      onClick={() => toggleActive(label)}
-                      disabled={labelLoading || editingId !== null}
-                      title={label.is_active ? '無効にする' : '有効にする'}
-                    >
+                      onClick={() => toggleActive(label)} disabled={labelLoading || editingId !== null}>
                       <Power className="h-3 w-3" />
                     </Button>
                   </div>
@@ -561,6 +597,110 @@ export function AdminDashboard({
           <Button type="button" variant="outline" className="w-full mt-1" onClick={startAdd}>
             <Plus className="h-4 w-4 mr-2" />ラベルを追加
           </Button>
+        )}
+      </TabsContent>
+
+      {/* ── シーズン ── */}
+      <TabsContent value="season" className="space-y-3">
+        {seasons === null ? (
+          <Card className="border-dashed">
+            <CardContent className="pt-4 pb-4 text-center">
+              <CalendarDays className="h-8 w-8 mx-auto mb-2 text-[var(--color-muted-foreground)] opacity-40" />
+              <p className="text-sm font-medium mb-1">シーズン機能は未設定です</p>
+              <p className="text-xs text-[var(--color-muted-foreground)]">
+                Supabase SQL Editorで seasons テーブルを作成してください
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {/* 現在のシーズン */}
+            {(() => {
+              const current = seasons.find(s => s.is_current);
+              return current ? (
+                <Card className="border-[var(--color-primary)]/30 bg-[var(--color-neon-dim)]">
+                  <CardHeader className="pb-2 pt-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-[var(--color-win)] animate-pulse" />
+                      現在のシーズン
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pb-3">
+                    <p className="text-lg font-black neon-text">{current.name}</p>
+                    <p className="text-xs text-[var(--color-muted-foreground)] mt-0.5">
+                      開始: {formatDate(current.started_at)}
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <p className="text-xs text-[var(--color-muted-foreground)] text-center py-3">まだシーズンが設定されていません</p>
+              );
+            })()}
+
+            {/* 新シーズン開始フォーム */}
+            {!showNewSeasonForm ? (
+              <Button variant="outline" className="w-full" onClick={() => setShowNewSeasonForm(true)}>
+                <Plus className="h-4 w-4 mr-2" />新シーズンを開始
+              </Button>
+            ) : (
+              <Card className="border-[var(--color-provisional)]/40">
+                <CardHeader className="pb-2 pt-3">
+                  <CardTitle className="text-sm">新シーズン設定</CardTitle>
+                </CardHeader>
+                <CardContent className="pb-3 space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">シーズン名 <span className="text-[var(--color-loss)]">*</span></Label>
+                    <Input value={newSeasonName} onChange={e => setNewSeasonName(e.target.value)} placeholder="例: 2025年春シーズン" className="h-8 text-sm" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">引き継ぎ率 (0〜1)</Label>
+                      <Input type="number" min="0" max="1" step="0.1" value={carryoverFactor} onChange={e => setCarryoverFactor(e.target.value)} className="h-8 text-sm font-mono" />
+                      <p className="text-[10px] text-[var(--color-muted-foreground)]">0.7 = 差分の70%引き継ぎ</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">基準レート</Label>
+                      <Input type="number" min="0" value={carryoverBase} onChange={e => setCarryoverBase(e.target.value)} className="h-8 text-sm font-mono" />
+                      <p className="text-[10px] text-[var(--color-muted-foreground)]">圧縮の中心値</p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-[var(--color-provisional)] bg-[var(--color-provisional)]/10 rounded-lg px-3 py-2">
+                    ⚠ 開始すると現在レートがリセットされます。スナップショットは自動保存されます。
+                  </p>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" className="flex-1 h-8" onClick={() => setShowNewSeasonForm(false)}>
+                      <X className="h-3.5 w-3.5 mr-1" />キャンセル
+                    </Button>
+                    <Button type="button" size="sm" className="flex-1 h-8" onClick={handleStartNewSeason} disabled={seasonLoading || !newSeasonName.trim()}>
+                      {seasonLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <CalendarDays className="h-3.5 w-3.5 mr-1" />}
+                      開始する
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* 過去シーズン一覧 */}
+            {seasons.filter(s => !s.is_current).length > 0 && (
+              <div>
+                <p className="text-xs text-[var(--color-muted-foreground)] mb-2">過去のシーズン</p>
+                <div className="space-y-1.5">
+                  {seasons.filter(s => !s.is_current).map(s => (
+                    <Card key={s.id} className="opacity-70">
+                      <CardContent className="pt-2.5 pb-2.5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-semibold">{s.name}</p>
+                          <p className="text-[10px] text-[var(--color-muted-foreground)]">
+                            {formatDate(s.started_at)} 〜 {s.ended_at ? formatDate(s.ended_at) : ''}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </TabsContent>
 
@@ -581,7 +721,6 @@ export function AdminDashboard({
           </CardContent>
         </Card>
 
-        {/* K値・閾値 */}
         <Card>
           <CardHeader><CardTitle className="text-sm">K値 / 試合数設定</CardTitle></CardHeader>
           <CardContent className="space-y-3">
@@ -595,19 +734,14 @@ export function AdminDashboard({
             ] as const).map(([key, lbl]) => (
               <div key={key} className="flex items-center justify-between gap-3">
                 <Label className="text-xs text-[var(--color-muted-foreground)] flex-1">{lbl}</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={settingsForm[key]}
+                <Input type="number" min="0" value={settingsForm[key]}
                   onChange={e => setSettingsForm(f => ({ ...f, [key]: e.target.value }))}
-                  className="h-8 text-sm font-mono w-24 text-right"
-                />
+                  className="h-8 text-sm font-mono w-24 text-right" />
               </div>
             ))}
           </CardContent>
         </Card>
 
-        {/* セット補正 */}
         <Card>
           <CardHeader><CardTitle className="text-sm">セット補正（M値）</CardTitle></CardHeader>
           <CardContent className="space-y-3">
@@ -620,24 +754,16 @@ export function AdminDashboard({
             ] as const).map(([key, lbl]) => (
               <div key={key} className="flex items-center justify-between gap-3">
                 <Label className="text-xs text-[var(--color-muted-foreground)] flex-1">{lbl}</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.05"
-                  value={settingsForm[key]}
+                <Input type="number" min="0" step="0.05" value={settingsForm[key]}
                   onChange={e => setSettingsForm(f => ({ ...f, [key]: e.target.value }))}
-                  className="h-8 text-sm font-mono w-24 text-right"
-                />
+                  className="h-8 text-sm font-mono w-24 text-right" />
               </div>
             ))}
           </CardContent>
         </Card>
 
         <Button onClick={handleSaveSettings} disabled={settingsLoading} className="w-full">
-          {settingsLoading
-            ? <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            : <Save className="h-4 w-4 mr-2" />
-          }
+          {settingsLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
           設定を保存
         </Button>
       </TabsContent>

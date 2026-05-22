@@ -6,8 +6,12 @@ import { RatingChart } from '@/components/profile/rating-chart';
 import { MyStatsCard } from '@/components/profile/my-stats-card';
 import { ProfileEditForm } from '@/components/profile/profile-edit-form';
 import { SignOutButton } from '@/components/profile/sign-out-button';
+import { PersonalBestsCard } from '@/components/profile/personal-bests-card';
+import { HeadToHeadCard } from '@/components/profile/head-to-head-card';
+import { buildPersonalBests } from '@/lib/gamification/stats';
+import { buildHeadToHead } from '@/lib/gamification/headToHead';
 import type { RatingChartPoint } from '@/types/app';
-import type { RatingHistory } from '@/types/database';
+import type { RatingHistory, Match } from '@/types/database';
 
 export default async function ProfilePage() {
   const user = await getAuthUser();
@@ -27,50 +31,89 @@ export default async function ProfilePage() {
   const [
     { data: playerRating },
     { data: historiesRaw },
+    { data: h2hMatchesRaw },
   ] = await Promise.all([
     supabase.from('player_ratings').select('*').eq('group_id', groupId).eq('user_id', user.id).single(),
     supabase.from('rating_histories').select('*').eq('group_id', groupId).eq('user_id', user.id)
-      .order('created_at', { ascending: true }).limit(50),
+      .order('created_at', { ascending: true }).limit(60),
+    supabase.from('matches')
+      .select('*').eq('group_id', groupId).eq('status', 'approved')
+      .or(`player_a_id.eq.${user.id},player_b_id.eq.${user.id}`)
+      .order('approved_at', { ascending: false }).limit(100),
   ]);
 
-  const histories = historiesRaw as RatingHistory[] | null;
+  const histories  = historiesRaw as RatingHistory[] | null;
+  const h2hMatches = h2hMatchesRaw as Match[] ?? [];
+
+  const opponentIds = [...new Set(h2hMatches.map(m =>
+    m.player_a_id === user.id ? m.player_b_id : m.player_a_id
+  ))];
+  const winMatchIds = (histories ?? []).filter(h => h.result === 'win').map(h => h.match_id);
 
   const [
     { count: rankCount },
     { count: totalCount },
     { data: oppProfiles },
+    { data: oppRatings },
+    { data: oppWinHistories },
   ] = await Promise.all([
-    supabase.from('player_ratings').select('*', { count: 'exact', head: true })
+    supabase.from('player_ratings').select('user_id', { count: 'exact', head: true })
       .eq('group_id', groupId).gt('rating', playerRating?.rating ?? 0),
-    supabase.from('player_ratings').select('*', { count: 'exact', head: true })
+    supabase.from('player_ratings').select('user_id', { count: 'exact', head: true })
       .eq('group_id', groupId),
-    (histories?.length ?? 0) > 0
-      ? supabase.from('profiles').select('user_id, nickname')
-          .in('user_id', histories!.map(h => h.opponent_id))
-      : Promise.resolve({ data: [] as { user_id: string; nickname: string }[] }),
+    opponentIds.length > 0
+      ? supabase.from('profiles').select('user_id, nickname, avatar_url').in('user_id', opponentIds)
+      : Promise.resolve({ data: [] as { user_id: string; nickname: string; avatar_url: string | null }[] }),
+    opponentIds.length > 0
+      ? supabase.from('player_ratings').select('user_id, rating').eq('group_id', groupId).in('user_id', opponentIds)
+      : Promise.resolve({ data: [] as { user_id: string; rating: number }[] }),
+    winMatchIds.length > 0
+      ? supabase.from('rating_histories')
+          .select('match_id, user_id, rating_before')
+          .in('match_id', winMatchIds).neq('user_id', user.id)
+      : Promise.resolve({ data: [] as { match_id: string; user_id: string; rating_before: number }[] }),
   ]);
 
   const rank = (rankCount ?? 0) + 1;
-  const oppMap = new Map(oppProfiles?.map(p => [p.user_id, p.nickname]) ?? []);
+
+  const profileMap = new Map(oppProfiles?.map(p => [p.user_id, p]) ?? []);
+  const ratingMap  = new Map(oppRatings?.map(r => [r.user_id, Math.round(Number(r.rating))]) ?? []);
+
+  // Chart opponent names (histories are ascending, so we need names from chart opp ids)
+  const chartOppIds = [...new Set((histories ?? []).map(h => h.opponent_id))];
+  const { data: chartOppProfiles } = chartOppIds.length > 0
+    ? await supabase.from('profiles').select('user_id, nickname').in('user_id', chartOppIds)
+    : { data: [] as { user_id: string; nickname: string }[] };
+  const chartOppMap = new Map(chartOppProfiles?.map(p => [p.user_id, p.nickname]) ?? []);
+
+  const opponentHistByMatchId = new Map(
+    (oppWinHistories ?? []).map(h => [h.match_id, h as unknown as RatingHistory])
+  );
+
+  const bests = playerRating
+    ? buildPersonalBests(playerRating, histories ?? [], opponentHistByMatchId)
+    : null;
+
+  const h2hEntries = buildHeadToHead(h2hMatches, user.id, profileMap, ratingMap);
 
   const chartPoints: RatingChartPoint[] = [];
   if (playerRating) {
     chartPoints.push({
-      date: profile.created_at,
-      rating: playerRating.initial_rating,
-      rating_display: playerRating.initial_rating,
-      match_id: 'initial',
-      result: 'win',
+      date:              profile.created_at,
+      rating:            playerRating.initial_rating,
+      rating_display:    playerRating.initial_rating,
+      match_id:          'initial',
+      result:            'win',
       opponent_nickname: '開始',
     });
-    histories?.forEach(h => {
+    (histories ?? []).forEach(h => {
       chartPoints.push({
-        date: h.created_at,
-        rating: Number(h.rating_after),
-        rating_display: Math.round(Number(h.rating_after)),
-        match_id: h.match_id,
-        result: h.result,
-        opponent_nickname: oppMap.get(h.opponent_id) ?? '?',
+        date:              h.created_at,
+        rating:            Number(h.rating_after),
+        rating_display:    Math.round(Number(h.rating_after)),
+        match_id:          h.match_id,
+        result:            h.result,
+        opponent_nickname: chartOppMap.get(h.opponent_id) ?? '?',
       });
     });
   }
@@ -111,6 +154,10 @@ export default async function ProfilePage() {
           <RatingChart data={chartPoints} />
         </div>
       )}
+
+      {bests && <PersonalBestsCard bests={bests} />}
+
+      {h2hEntries.length > 0 && <HeadToHeadCard entries={h2hEntries} />}
 
       {/* グループ管理リンク */}
       <Link

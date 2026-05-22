@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { StaggerList, StaggerItem } from '@/components/ui/motion';
 import { TrendingUp, TrendingDown } from 'lucide-react';
@@ -37,10 +38,10 @@ export function MatchHistoryList(props: Props) {
       <StaggerList className="space-y-2">
         {histories.map((h) => {
           const opponent = profileMap.get(h.opponent_id);
-          const isWin = h.result === 'win';
-          const change = h.rating_change;
-          const m = h.matches;
-          const score = m
+          const isWin    = h.result === 'win';
+          const change   = h.rating_change;
+          const m        = h.matches;
+          const score    = m
             ? m.player_a_id === props.currentUserId
               ? `${m.player_a_sets}-${m.player_b_sets}`
               : `${m.player_b_sets}-${m.player_a_sets}`
@@ -52,14 +53,18 @@ export function MatchHistoryList(props: Props) {
                 className="flex items-center gap-3 p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] border-l-4 shadow-card"
                 style={{ borderLeftColor: isWin ? 'var(--color-win)' : 'var(--color-loss)' }}
               >
-                <Avatar className="h-9 w-9 shrink-0">
-                  <AvatarImage src={opponent?.avatar_url ?? undefined} />
-                  <AvatarFallback className="text-xs">{opponent?.nickname?.[0] ?? '?'}</AvatarFallback>
-                </Avatar>
+                <Link href={`/players/${h.opponent_id}`} className="shrink-0">
+                  <Avatar className="h-9 w-9 hover:ring-1 hover:ring-[var(--color-primary)]/50 transition-all">
+                    <AvatarImage src={opponent?.avatar_url ?? undefined} />
+                    <AvatarFallback className="text-xs">{opponent?.nickname?.[0] ?? '?'}</AvatarFallback>
+                  </Avatar>
+                </Link>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-sm font-semibold truncate">{opponent?.nickname ?? '不明'}</span>
+                    <Link href={`/players/${h.opponent_id}`} className="text-sm font-semibold truncate hover:text-[var(--color-primary)] transition-colors">
+                      {opponent?.nickname ?? '不明'}
+                    </Link>
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 ${isWin ? 'bg-[var(--color-win)]/15 text-[var(--color-win)]' : 'bg-[var(--color-loss)]/15 text-[var(--color-loss)]'}`}>
                       {isWin ? '勝利' : '敗北'}
                     </span>
@@ -94,22 +99,22 @@ export function MatchHistoryList(props: Props) {
       {matches.map((m) => {
         const playerA = profileMap.get(m.player_a_id);
         const playerB = profileMap.get(m.player_b_id);
-        const aWon = m.winner_id === m.player_a_id;
+        const aWon    = m.winner_id === m.player_a_id;
 
         return (
           <StaggerItem key={m.id}>
             <div className="p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-card">
               <div className="flex items-center gap-2">
-                <div className={`flex-1 flex items-center gap-2 min-w-0 ${!aWon ? 'opacity-50' : ''}`}>
+                <Link href={`/players/${m.player_a_id}`} className={`flex-1 flex items-center gap-2 min-w-0 group ${!aWon ? 'opacity-50 hover:opacity-80' : ''}`}>
                   <Avatar className="h-8 w-8 shrink-0">
                     <AvatarImage src={playerA?.avatar_url ?? undefined} />
                     <AvatarFallback className="text-[10px]">{playerA?.nickname?.[0] ?? '?'}</AvatarFallback>
                   </Avatar>
-                  <span className="text-sm font-semibold truncate">{playerA?.nickname ?? '?'}</span>
+                  <span className="text-sm font-semibold truncate group-hover:text-[var(--color-primary)] transition-colors">{playerA?.nickname ?? '?'}</span>
                   {aWon && (
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-[var(--color-win)]/15 text-[var(--color-win)] shrink-0">勝</span>
                   )}
-                </div>
+                </Link>
 
                 <div className="text-center shrink-0 px-1">
                   <p className="text-lg font-black tabular-nums">
@@ -119,16 +124,16 @@ export function MatchHistoryList(props: Props) {
                   </p>
                 </div>
 
-                <div className={`flex-1 flex items-center gap-2 justify-end min-w-0 ${aWon ? 'opacity-50' : ''}`}>
+                <Link href={`/players/${m.player_b_id}`} className={`flex-1 flex items-center gap-2 justify-end min-w-0 group ${aWon ? 'opacity-50 hover:opacity-80' : ''}`}>
                   {!aWon && (
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-[var(--color-win)]/15 text-[var(--color-win)] shrink-0">勝</span>
                   )}
-                  <span className="text-sm font-semibold truncate text-right">{playerB?.nickname ?? '?'}</span>
+                  <span className="text-sm font-semibold truncate text-right group-hover:text-[var(--color-primary)] transition-colors">{playerB?.nickname ?? '?'}</span>
                   <Avatar className="h-8 w-8 shrink-0">
                     <AvatarImage src={playerB?.avatar_url ?? undefined} />
                     <AvatarFallback className="text-[10px]">{playerB?.nickname?.[0] ?? '?'}</AvatarFallback>
                   </Avatar>
-                </div>
+                </Link>
               </div>
 
               <div className="flex items-center justify-center gap-2 mt-2 text-[10px] text-[var(--color-muted-foreground)]">

@@ -159,5 +159,77 @@ export type ActionResult<T = void> =
   | { success: true; data: T }
   | { success: false; error: string };
 
+// ────────────────────────────────────────────────────────────
+// 試合フィード
+// ────────────────────────────────────────────────────────────
+
+export interface FeedEntry {
+  matchId: string;
+  approvedAt: string;
+  matchFormat: MatchFormat;
+  winnerId: string;
+  loserId: string;
+  winnerNickname: string;
+  winnerAvatarUrl: string | null;
+  loserNickname: string;
+  loserAvatarUrl: string | null;
+  playerASets: number;
+  playerBSets: number;
+  playerAId: string;
+  playerBId: string;
+  winnerRatingChange: number;
+  loserRatingChange: number;
+  winnerRatingBefore: number;
+  loserRatingBefore: number;
+  isGiantKilling: boolean;
+  giantKillingDiff: number;
+}
+
+// ────────────────────────────────────────────────────────────
+// 週間成長ランキング
+// ────────────────────────────────────────────────────────────
+
+export interface WeeklyRankEntry {
+  rank: number;
+  userId: string;
+  nickname: string;
+  avatarUrl: string | null;
+  totalChange: number;
+  matchCount: number;
+  currentRating: number;
+}
+
+// ────────────────────────────────────────────────────────────
+// 対戦相性
+// ────────────────────────────────────────────────────────────
+
+export interface HeadToHeadEntry {
+  opponentId: string;
+  opponentNickname: string;
+  opponentAvatarUrl: string | null;
+  opponentRating: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  lastPlayedAt: string;
+  totalMatches: number;
+}
+
+// ────────────────────────────────────────────────────────────
+// 自己ベスト
+// ────────────────────────────────────────────────────────────
+
+export interface PersonalBests {
+  highestRating: number;
+  lowestRating: number;
+  currentRating: number;
+  maxSingleMatchGain: number;
+  giantKillingCount: number;
+  weeklyRatingChange: number;
+  currentStreak: number;
+  wins: number;
+  totalMatches: number;
+}
+
 // re-export DB types for convenience
 export type { Group, GroupMember, MemberRole, MatchFormat, MatchResult, MatchStatus, PlayerRating, Profile, RatingHistory, Match, InitialRatingLabel };

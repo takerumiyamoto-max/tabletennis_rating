@@ -135,6 +135,33 @@ export interface RatingHistory {
   created_at: string;
 }
 
+export interface Season {
+  id: string;
+  group_id: string;
+  name: string;
+  description: string | null;
+  is_current: boolean;
+  carryover_factor: number;
+  carryover_base_rating: number;
+  started_at: string;
+  ended_at: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface SeasonSnapshot {
+  id: string;
+  season_id: string;
+  group_id: string;
+  user_id: string;
+  final_rating: number;
+  final_wins: number;
+  final_losses: number;
+  approved_match_count: number;
+  final_rank: number | null;
+  created_at: string;
+}
+
 export interface Notification {
   id: string;
   group_id: string | null;
