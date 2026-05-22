@@ -11,8 +11,9 @@ import { Medal } from 'lucide-react';
 import Link from 'next/link';
 import { buildPersonalBests } from '@/lib/gamification/stats';
 import { buildHeadToHead } from '@/lib/gamification/headToHead';
+import { PlayerBadgePreview } from '@/components/badges/player-badge-preview';
 import type { RatingChartPoint } from '@/types/app';
-import type { RatingHistory, Match } from '@/types/database';
+import type { RatingHistory, Match, BadgeDefinition } from '@/types/database';
 
 interface Props {
   params: Promise<{ userId: string }>;
@@ -48,16 +49,38 @@ export default async function PlayerDetailPage({ params }: Props) {
     { data: targetProfile },
     { data: targetRating },
     { data: historiesRaw },
+    { data: targetBadgeRows },
   ] = await Promise.all([
     supabase.from('profiles').select('user_id, nickname, avatar_url, created_at').eq('user_id', targetUserId).single(),
     supabase.from('player_ratings').select('*').eq('group_id', groupId).eq('user_id', targetUserId).single(),
     supabase.from('rating_histories').select('*').eq('group_id', groupId).eq('user_id', targetUserId)
       .order('created_at', { ascending: true }).limit(60),
+    supabase.from('player_badges')
+      .select('badge_id, unlocked_at')
+      .eq('group_id', groupId)
+      .eq('user_id', targetUserId)
+      .order('unlocked_at', { ascending: false })
+      .limit(8),
   ]);
 
   if (!targetProfile || !targetRating) notFound();
 
   const histories = historiesRaw as RatingHistory[] | null;
+
+  // バッジ定義取得（レア度の高い順で上位8件）
+  const targetBadgeIds = targetBadgeRows?.map(b => b.badge_id) ?? [];
+  const { data: targetBadgeDefsRaw } = targetBadgeIds.length > 0
+    ? await supabase.from('badge_definitions').select('*').in('id', targetBadgeIds)
+    : { data: [] as BadgeDefinition[] };
+  const rarityOrder = { legendary: 0, epic: 1, rare: 2, uncommon: 3, common: 4 };
+  const targetBadgeDefMap = new Map((targetBadgeDefsRaw ?? []).map((b: BadgeDefinition) => [b.id, b]));
+  const targetUnlockedBadges = (targetBadgeRows ?? [])
+    .map(r => {
+      const def = targetBadgeDefMap.get(r.badge_id);
+      return def ? { ...def, unlocked_at: r.unlocked_at } : null;
+    })
+    .filter((b): b is BadgeDefinition & { unlocked_at: string } => b !== null)
+    .sort((a, b) => (rarityOrder[a.rarity] ?? 9) - (rarityOrder[b.rarity] ?? 9));
 
   const [
     { count: rankCount },
@@ -219,6 +242,14 @@ export default async function PlayerDetailPage({ params }: Props) {
 
       {/* Head to head */}
       <HeadToHeadCard entries={h2hEntries} />
+
+      {/* 獲得バッジ */}
+      {targetUnlockedBadges.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="font-semibold text-sm">獲得バッジ</h2>
+          <PlayerBadgePreview badges={targetUnlockedBadges} showSeeAll={false} maxCount={8} />
+        </div>
+      )}
     </div>
   );
 }

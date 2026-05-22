@@ -10,8 +10,9 @@ import { PersonalBestsCard } from '@/components/profile/personal-bests-card';
 import { HeadToHeadCard } from '@/components/profile/head-to-head-card';
 import { buildPersonalBests } from '@/lib/gamification/stats';
 import { buildHeadToHead } from '@/lib/gamification/headToHead';
+import { PlayerBadgePreview } from '@/components/badges/player-badge-preview';
 import type { RatingChartPoint } from '@/types/app';
-import type { RatingHistory, Match } from '@/types/database';
+import type { RatingHistory, Match, BadgeDefinition } from '@/types/database';
 
 export default async function ProfilePage() {
   const user = await getAuthUser();
@@ -32,6 +33,7 @@ export default async function ProfilePage() {
     { data: playerRating },
     { data: historiesRaw },
     { data: h2hMatchesRaw },
+    { data: myBadgeRows },
   ] = await Promise.all([
     supabase.from('player_ratings').select('*').eq('group_id', groupId).eq('user_id', user.id).single(),
     supabase.from('rating_histories').select('*').eq('group_id', groupId).eq('user_id', user.id)
@@ -40,10 +42,29 @@ export default async function ProfilePage() {
       .select('*').eq('group_id', groupId).eq('status', 'approved')
       .or(`player_a_id.eq.${user.id},player_b_id.eq.${user.id}`)
       .order('approved_at', { ascending: false }).limit(100),
+    supabase.from('player_badges')
+      .select('badge_id, unlocked_at')
+      .eq('group_id', groupId)
+      .eq('user_id', user.id)
+      .order('unlocked_at', { ascending: false })
+      .limit(6),
   ]);
 
   const histories  = historiesRaw as RatingHistory[] | null;
   const h2hMatches = h2hMatchesRaw as Match[] ?? [];
+
+  // バッジ定義を取得して UnlockedBadge 配列を構築
+  const badgeIds = myBadgeRows?.map(b => b.badge_id) ?? [];
+  const { data: badgeDefsRaw } = badgeIds.length > 0
+    ? await supabase.from('badge_definitions').select('*').in('id', badgeIds)
+    : { data: [] as BadgeDefinition[] };
+  const badgeDefMap = new Map((badgeDefsRaw ?? []).map((b: BadgeDefinition) => [b.id, b]));
+  const unlockedBadges = (myBadgeRows ?? [])
+    .map(r => {
+      const def = badgeDefMap.get(r.badge_id);
+      return def ? { ...def, unlocked_at: r.unlocked_at } : null;
+    })
+    .filter((b): b is BadgeDefinition & { unlocked_at: string } => b !== null);
 
   const opponentIds = [...new Set(h2hMatches.map(m =>
     m.player_a_id === user.id ? m.player_b_id : m.player_a_id
@@ -158,6 +179,14 @@ export default async function ProfilePage() {
       {bests && <PersonalBestsCard bests={bests} />}
 
       {h2hEntries.length > 0 && <HeadToHeadCard entries={h2hEntries} />}
+
+      {/* 獲得バッジ */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-sm">獲得バッジ</h2>
+        </div>
+        <PlayerBadgePreview badges={unlockedBadges} showSeeAll maxCount={6} />
+      </div>
 
       {/* グループ管理リンク */}
       <Link

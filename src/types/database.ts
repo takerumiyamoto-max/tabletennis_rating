@@ -175,6 +175,39 @@ export interface Notification {
 }
 
 // ────────────────────────────────────────────────────────────
+// Badge types
+// ────────────────────────────────────────────────────────────
+export type BadgeRarity   = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+export type BadgeCategory = 'trial' | 'victory' | 'streak' | 'rating' | 'quality' | 'aggregate' | 'season';
+
+export interface BadgeDefinition {
+  id:               string;
+  code:             string;
+  name:             string;
+  description:      string;
+  unlock_condition: string;
+  icon:             string | null;
+  category:         BadgeCategory;
+  rarity:           BadgeRarity;
+  condition_type:   string;
+  condition_value:  number | null;
+  title_reward:     string | null;
+  sort_order:       number;
+  is_active:        boolean;
+  created_at:       string;
+}
+
+export interface PlayerBadge {
+  id:               string;
+  group_id:         string;
+  user_id:          string;
+  badge_id:         string;
+  related_match_id: string | null;
+  unlocked_at:      string;
+  created_at:       string;
+}
+
+// ────────────────────────────────────────────────────────────
 // Database 型 (Supabase v2 生成形式に準拠)
 // ────────────────────────────────────────────────────────────
 export type Database = {
