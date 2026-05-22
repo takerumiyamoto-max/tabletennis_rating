@@ -17,11 +17,14 @@ export function UnreadBadge() {
       if (cancelled) return;
       if (!user) { setCount(0); return; }
 
+      // 自分が player_b で、かつ自分が submit していない pending 試合 = 承認待ち件数
       const { count: n } = await supabase
-        .from('notifications')
+        .from('matches')
         .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .is('read_at', null);
+        .eq('player_b_id', user.id)
+        .eq('status', 'pending')
+        .neq('submitted_by', user.id);
+
       if (!cancelled) setCount(n ?? 0);
     }
 
