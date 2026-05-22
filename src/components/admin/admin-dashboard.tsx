@@ -158,14 +158,14 @@ export function AdminDashboard({
       );
 
       const supabase = createClient();
-      const { error } = await supabase.rpc('admin_approve_match_with_ratings', {
+      const { error } = await supabase.rpc('approve_match_with_ratings', {
         p_match_id:       matchId,
         p_a_rating_after: result.playerA.ratingAfter,
         p_a_result:       result.playerA.result,
         p_b_rating_after: result.playerB.ratingAfter,
         p_b_result:       result.playerB.result,
       });
-      if (error) throw error;
+      if (error) throw new Error(error.message);
 
       setLocalPending(prev => prev.filter((x: { id: string }) => x.id !== matchId));
       toast({ title: '承認しました', variant: 'success' });

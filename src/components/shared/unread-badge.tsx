@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
 export function UnreadBadge() {
   const [count, setCount] = useState(0);
+  const pathname = usePathname();
 
   useEffect(() => {
     let mounted = true;
@@ -20,7 +22,7 @@ export function UnreadBadge() {
 
     load();
     return () => { mounted = false; };
-  }, []);
+  }, [pathname]);
 
   if (count <= 0) return null;
 
