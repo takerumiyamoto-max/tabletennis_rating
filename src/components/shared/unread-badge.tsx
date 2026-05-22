@@ -9,19 +9,31 @@ export function UnreadBadge() {
   const pathname = usePathname();
 
   useEffect(() => {
-    let mounted = true;
+    let cancelled = false;
 
     async function load() {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (cancelled) return;
+      if (!user) { setCount(0); return; }
+
       const { count: n } = await supabase
         .from('notifications')
         .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
         .is('read_at', null);
-      if (mounted) setCount(n ?? 0);
+      if (!cancelled) setCount(n ?? 0);
     }
 
     load();
-    return () => { mounted = false; };
+
+    function handleRefresh() { load(); }
+    window.addEventListener('notifications:refresh', handleRefresh);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('notifications:refresh', handleRefresh);
+    };
   }, [pathname]);
 
   if (count <= 0) return null;

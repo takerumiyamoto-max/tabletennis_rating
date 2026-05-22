@@ -83,25 +83,30 @@ export function MatchForm({ groupId, userId, opponents }: MatchFormProps) {
     setLoading(true);
     try {
       const supabase = createClient();
-      const { error } = await supabase.from('matches').insert({
-        group_id:     groupId,
-        submitted_by: userId,
-        player_a_id:  userId,
-        player_b_id:  opponentId,
-        winner_id:    score.a > score.b ? userId : opponentId,
-        match_format: format,
-        player_a_sets: score.a,
-        player_b_sets: score.b,
-        status: 'pending',
-      });
+      const { data: matchRow, error } = await supabase
+        .from('matches')
+        .insert({
+          group_id:     groupId,
+          submitted_by: userId,
+          player_a_id:  userId,
+          player_b_id:  opponentId,
+          winner_id:    score.a > score.b ? userId : opponentId,
+          match_format: format,
+          player_a_sets: score.a,
+          player_b_sets: score.b,
+          status: 'pending',
+        })
+        .select('id')
+        .single();
       if (error) throw error;
 
       await supabase.from('notifications').insert({
-        group_id: groupId,
-        user_id: opponentId,
-        type: 'match_approval_request',
-        title: '試合結果の承認依頼',
-        body: '試合結果が入力されました。確認して承認してください。',
+        group_id:         groupId,
+        user_id:          opponentId,
+        type:             'match_approval_request',
+        title:            '試合結果の承認依頼',
+        body:             '試合結果が入力されました。確認して承認してください。',
+        related_match_id: matchRow?.id ?? null,
       });
 
       toast({ title: '送信完了', description: '相手に承認依頼を送りました', variant: 'success' });

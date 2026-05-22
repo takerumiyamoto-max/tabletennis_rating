@@ -141,36 +141,70 @@ export function AdminDashboard({
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const m = localPending.find((x: any) => x.id === matchId);
+      console.log('[adminApprove] match:', m);
       if (!m) throw new Error('試合が見つかりません');
 
+      // player_ratings は単一オブジェクトの場合も配列の場合も正規化
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ratingA = members.find((mem: any) => mem.user_id === m.player_a_id)?.player_ratings;
+      function normalizeRating(raw: unknown): { rating: unknown; approved_match_count: number } | null {
+        if (!raw) return null;
+        const obj = Array.isArray(raw) ? raw[0] : raw;
+        return (obj ?? null) as { rating: unknown; approved_match_count: number } | null;
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ratingB = members.find((mem: any) => mem.user_id === m.player_b_id)?.player_ratings;
-      if (!ratingA || !ratingB) throw new Error('レート情報が見つかりません');
+      const rawA = members.find((mem: any) => mem.user_id === m.player_a_id)?.player_ratings;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rawB = members.find((mem: any) => mem.user_id === m.player_b_id)?.player_ratings;
+      const ratingA = normalizeRating(rawA);
+      const ratingB = normalizeRating(rawB);
+      console.log('[adminApprove] rawA:', rawA, '→ ratingA:', ratingA);
+      console.log('[adminApprove] rawB:', rawB, '→ ratingB:', ratingB);
+
+      if (!ratingA || !ratingB) throw new Error(`レート情報が見つかりません (A:${!!ratingA} B:${!!ratingB})`);
+
+      const numRatingA = Number(ratingA.rating);
+      const numRatingB = Number(ratingB.rating);
+      console.log('[adminApprove] numRatingA:', numRatingA, 'numRatingB:', numRatingB);
+      if (isNaN(numRatingA)) throw new Error(`player_a のレートが不正な値です (${ratingA.rating})`);
+      if (isNaN(numRatingB)) throw new Error(`player_b のレートが不正な値です (${ratingB.rating})`);
 
       const result = calculateRatingUpdate(
         { playerAId: m.player_a_id, playerBId: m.player_b_id, winnerId: m.winner_id,
           format: m.match_format, playerASets: m.player_a_sets, playerBSets: m.player_b_sets },
-        { userId: m.player_a_id, rating: Number(ratingA.rating), approvedMatchCount: ratingA.approved_match_count },
-        { userId: m.player_b_id, rating: Number(ratingB.rating), approvedMatchCount: ratingB.approved_match_count },
+        { userId: m.player_a_id, rating: numRatingA, approvedMatchCount: ratingA.approved_match_count },
+        { userId: m.player_b_id, rating: numRatingB, approvedMatchCount: ratingB.approved_match_count },
         initialSettings ? toRatingSettings(initialSettings) : undefined,
       );
+      console.log('[adminApprove] ratingUpdateResult:', result);
 
       const supabase = createClient();
-      const { error } = await supabase.rpc('approve_match_with_ratings', {
+      const rpcParams = {
         p_match_id:       matchId,
         p_a_rating_after: result.playerA.ratingAfter,
         p_a_result:       result.playerA.result,
         p_b_rating_after: result.playerB.ratingAfter,
         p_b_result:       result.playerB.result,
-      });
-      if (error) throw new Error(error.message);
+      };
+      console.log('[adminApprove] calling RPC with:', rpcParams);
+      const { data: rpcData, error } = await supabase.rpc('approve_match_with_ratings', rpcParams);
+      console.log('[adminApprove] RPC response → data:', rpcData, 'error:', error);
+
+      if (error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const e = error as any;
+        throw new Error([e.message, e.details, e.hint].filter(Boolean).join(' / '));
+      }
 
       setLocalPending(prev => prev.filter((x: { id: string }) => x.id !== matchId));
       toast({ title: '承認しました', variant: 'success' });
+      window.dispatchEvent(new Event('notifications:refresh'));
     } catch (err: unknown) {
-      toast({ title: 'エラー', description: err instanceof Error ? err.message : '失敗しました', variant: 'destructive' });
+      console.error('[adminApprove] error:', err);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const e = err as any;
+      const desc = [e?.message, e?.details, e?.hint].filter(Boolean).join(' / ') || '失敗しました';
+      toast({ title: '承認エラー', description: desc, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
