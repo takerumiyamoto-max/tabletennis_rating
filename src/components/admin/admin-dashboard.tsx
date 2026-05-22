@@ -16,7 +16,8 @@ import {
   Loader2, Plus, Pencil, Save, X, Power, UserMinus, RefreshCw, CheckCircle, Edit2,
 } from 'lucide-react';
 import { removeMember, changeMyInitialRating } from '@/app/actions/groups';
-import { adminApproveMatch, updateMemberRating, startNewSeason } from '@/app/actions/admin';
+import { updateMemberRating, startNewSeason } from '@/app/actions/admin';
+import { calculateRatingUpdate, toRatingSettings } from '@/lib/rating/elo';
 import { formatDateTime, formatDate } from '@/lib/utils';
 import type { MemberRole, GroupRatingSettings, InitialRatingLabel } from '@/types/database';
 import type { Season } from '@/types/database';
@@ -138,9 +139,35 @@ export function AdminDashboard({
   async function handleAdminApprove(matchId: string) {
     setLoading(true);
     try {
-      const result = await adminApproveMatch(matchId);
-      if (result.error) throw new Error(result.error);
-      setLocalPending(prev => prev.filter((m: { id: string }) => m.id !== matchId));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const m = localPending.find((x: any) => x.id === matchId);
+      if (!m) throw new Error('試合が見つかりません');
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ratingA = members.find((mem: any) => mem.user_id === m.player_a_id)?.player_ratings;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ratingB = members.find((mem: any) => mem.user_id === m.player_b_id)?.player_ratings;
+      if (!ratingA || !ratingB) throw new Error('レート情報が見つかりません');
+
+      const result = calculateRatingUpdate(
+        { playerAId: m.player_a_id, playerBId: m.player_b_id, winnerId: m.winner_id,
+          format: m.match_format, playerASets: m.player_a_sets, playerBSets: m.player_b_sets },
+        { userId: m.player_a_id, rating: Number(ratingA.rating), approvedMatchCount: ratingA.approved_match_count },
+        { userId: m.player_b_id, rating: Number(ratingB.rating), approvedMatchCount: ratingB.approved_match_count },
+        initialSettings ? toRatingSettings(initialSettings) : undefined,
+      );
+
+      const supabase = createClient();
+      const { error } = await supabase.rpc('admin_approve_match_with_ratings', {
+        p_match_id:       matchId,
+        p_a_rating_after: result.playerA.ratingAfter,
+        p_a_result:       result.playerA.result,
+        p_b_rating_after: result.playerB.ratingAfter,
+        p_b_result:       result.playerB.result,
+      });
+      if (error) throw error;
+
+      setLocalPending(prev => prev.filter((x: { id: string }) => x.id !== matchId));
       toast({ title: '承認しました', variant: 'success' });
     } catch (err: unknown) {
       toast({ title: 'エラー', description: err instanceof Error ? err.message : '失敗しました', variant: 'destructive' });
