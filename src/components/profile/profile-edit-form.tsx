@@ -8,7 +8,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { FadeInUp } from '@/components/ui/motion';
 import { toast } from '@/hooks/use-toast';
 import { Loader2, Pencil, Check, Camera } from 'lucide-react';
-import type { Profile } from '@/types/database';
+import { BadgeStrip } from '@/components/badges/badge-strip';
+import type { Profile, BadgeDefinition } from '@/types/database';
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -18,9 +19,11 @@ interface Props {
   rating?: number;
   rank?: number;
   isProvisional?: boolean;
+  allBadges?: BadgeDefinition[];
+  unlockedBadgeIds?: string[];
 }
 
-export function ProfileEditForm({ profile, rating, rank, isProvisional }: Props) {
+export function ProfileEditForm({ profile, rating, rank, isProvisional, allBadges, unlockedBadgeIds }: Props) {
   const [editing, setEditing]     = useState(false);
   const [nickname, setNickname]   = useState(profile.nickname);
   const [loading, setLoading]     = useState(false);
@@ -182,6 +185,10 @@ export function ProfileEditForm({ profile, rating, rank, isProvisional }: Props)
           <p className="text-[10px] text-[var(--color-muted-foreground)] mt-1 font-mono">
             ID: {profile.user_id.slice(0, 12)}...
           </p>
+
+          {allBadges && unlockedBadgeIds && (
+            <BadgeStrip badges={allBadges} unlockedBadgeIds={unlockedBadgeIds} />
+          )}
         </div>
       </div>
     </FadeInUp>
