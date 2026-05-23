@@ -4,6 +4,12 @@
 
 卓球の試合結果を入力すると、相手の承認後に Elo レーティングが自動計算され、ランキング・履歴・グラフとして表示されるWebアプリです。大学の卓球部・サークル向けに設計されており、将来的には複数グループに対応します。
 
+https://supabase.com/dashboard/project/gallvmeahyyaslxnwxdb/sql/c18e6e03-8a26-4685-b8c6-0f7eadbc2eeb
+
+https://vercel.com/takerumiyamoto-maxs-projects/tabletennis-rating/BpUirhU4cNkvD53hgfyynRg1eSer
+
+https://resend.com/logs/8b160d70-53d0-4e88-9c2e-7336d8b35901
+
 ---
 
 ## 技術スタック
